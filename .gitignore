@@ -1,0 +1,9 @@
+archive/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+ntc_tc_sim_outputs*/
+*.mp4
+*.gif

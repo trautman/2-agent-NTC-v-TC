@@ -1,0 +1,65 @@
+# Configuration for simple_ntc_tc_sim_v20.py
+#
+# Available costs:
+#   C_NOMINAL
+#   C_NUM_COLLISIONS
+#   C_MDP
+#   C_ASD
+#   C_IMBALANCE
+#   C_PSC
+#   C_CONTROL_EFFORT
+#   C_COMBINED
+#
+# Available metrics:
+#   NOMINAL_COST
+#   NUM_COLLISIONS
+#   MDP
+#   ASD
+#   IMBALANCE
+#   PSC
+#   PATH_EFF
+#   CONTROL_EFFORT
+
+make_expected_metric_pages: true
+make_metric_pages: true
+make_pointwise_vs_ot_pages: true
+
+s_min: 0.5
+s_max: 10.0
+s_step: 0.5
+
+costs_to_run:
+  - C_NOMINAL
+
+make_metric_pages: true
+make_expected_metric_pages: true
+make_pointwise_vs_ot_pages: true
+make_snapshot_pngs: false
+make_movies: true
+
+movie_costs:
+  - C_NOMINAL
+
+movie_metric_sets:
+  metrics_safety:
+    - NOMINAL_COST
+    - NUM_COLLISIONS
+    - ASD
+    - MDP
+  metrics_coord_effort:
+    - IMBALANCE
+    - PSC
+    - PATH_EFF
+    - CONTROL_EFFORT
+
+snapshot_distances:
+  - 10.0
+  - 7.5
+  - 5.0
+  - 3.5
+  - 2.5
+  - 1.5
+  - 0.5
+
+parallel: false
+max_workers:
