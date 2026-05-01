@@ -1,195 +1,761 @@
-# NTC vs TC 2 Agent Navigation Simulation
+# NTC vs TC 2-Agent Navigation Simulation
 
 This repository studies a central question:
 
 > **Can collaboration improve performance for a given task at state $s$?**
 
-We compare **Trivial Collaboration (TC)** models with **Non-Trivial Collaboration (NTC)** models using joint distributions.
+We compare **Trivial Collaboration (TC)** models with **Non-Trivial Collaboration (NTC)** models using distributions over trajectory pairs.
+
+This README is intended to be a development document: the definitions below are meant to match the implementation in `simple_ntc_tc_sim_v20.py`.
 
 ---
 
-# Simulation Setup
+## 1. Simulation Setup
 
-Two agents move toward each other:
+Two agents move toward each other along the x-axis.
 
-- Agent 1: $(-s/2, 0) \rightarrow (s/2, 0)$  
-- Agent 2: $(s/2, 0) \rightarrow (-s/2, 0)$  
+Agent 1:
+
+$$
+h_0=(-s/2,0), \qquad h_T=(s/2,0)
+$$
+
+Agent 2:
+
+$$
+r_0=(s/2,0), \qquad r_T=(-s/2,0)
+$$
+
+In the current implementation, $s$ is both:
+
+- the initial separation between the agents
+- the path length from start to goal
+
+For each value of $s$, each agent selects a trajectory from a structured trajectory library. The library contains straight trajectories, left/right lateral deviations, several lateral profile shapes, and lateral displacement magnitudes from `LATERAL_LEVELS`.
+
+Each trajectory is a sequence of 2D points:
+
+$$
+h=(h_1,\ldots,h_T), \qquad r=(r_1,\ldots,r_T)
+$$
 
 where:
 
-- $s$ = initial separation **and** path length
-
-Each agent selects from a trajectory library with prior:
-
 $$
-p_h(h) \propto \exp(-\phi(h)), \quad p_r(r) \propto \exp(-\phi(r))
+h_t=(x_h(t),y_h(t)), \qquad r_t=(x_r(t),y_r(t))
 $$
 
 ---
 
-# Models
+## 2. Trajectory Preference Model
 
-## Independent (TC)
+Each trajectory receives a preference cost $\phi(\cdot)$.
+
+For a trajectory $z$, define:
 
 $$
-\gamma(h,r) = p_h(h)p_r(r)
+y_z(t)=\text{lateral position of } z \text{ at time } t
+$$
+
+$$
+d_{\max}(z)=\max_t |y_z(t)|
+$$
+
+The implemented preference cost is:
+
+$$
+\phi(z)
+=
+3 d_{\max}(z)^2
++
+12 \max(0,d_{\max}(z)-0.30)^2
++
+30 \max(0,d_{\max}(z)-0.60)^2
++
+1.4 \sum_t (\Delta y_z(t))^2
++
+2.8 \sum_t (\Delta^2 y_z(t))^2
+$$
+
+where:
+
+$$
+\Delta y_z(t)=y_z(t+1)-y_z(t)
+$$
+
+and:
+
+$$
+\Delta^2 y_z(t)=y_z(t+2)-2y_z(t+1)+y_z(t)
+$$
+
+The marginal trajectory distributions are:
+
+$$
+p_h(h_i)
+=
+\frac{\exp(-\lambda_{\mathrm{pref}}\phi(h_i))}
+{\sum_k \exp(-\lambda_{\mathrm{pref}}\phi(h_k))}
+$$
+
+$$
+p_r(r_j)
+=
+\frac{\exp(-\lambda_{\mathrm{pref}}\phi(r_j))}
+{\sum_k \exp(-\lambda_{\mathrm{pref}}\phi(r_k))}
+$$
+
+In the current code:
+
+$$
+\lambda_{\mathrm{pref}}=1.6
 $$
 
 ---
 
-## Response (fixed sample)
+## 3. Models
+
+All models are computed over a finite trajectory library. Let $h_i$ be a human trajectory sample and $r_j$ be a robot trajectory sample.
+
+### 3.1 Independent Model: TC, $p_h p_r$
+
+The independent model assumes the agents do not respond to each other.
 
 $$
-h^ = \arg\max_h p_h(h)
+\gamma_{\mathrm{ind}}(i,j)=p_h(h_i)p_r(r_j)
 $$
 
-$$
-q_r^*(r) \propto p_r(r)\exp\left(-\frac{c(h^,r)}{\lambda}\right)
-$$
+### 3.2 Response Model: Fixed Human Sample
 
----
-
-## Response (marginalized)
+First choose the most likely human trajectory:
 
 $$
-q_r^*(r) \propto p_r(r)\exp\left(-\frac{\mathbb{E}_{p_h}[c(h,r)]}{\lambda}\right)
+h^*=\arg\max_i p_h(h_i)
 $$
 
----
-
-## NTC: KL(joint)
+The robot then computes:
 
 $$
-\gamma^*(h,r) \propto p_h(h)p_r(r)\exp\left(-\frac{c(h,r)}{\lambda}\right)
-$$
-
----
-
-## NTC: KL(marginals)
-
-$$
-\gamma^* =
-\arg\min_\gamma
+q_r^*
+=
+\arg\min_{q_r}
 \left[
-\mathbb{E}_\gamma[c(h,r)]
-+ \lambda_h \mathrm{KL}(\gamma_h || p_h)
-+ \lambda_r \mathrm{KL}(\gamma_r || p_r)
+\sum_j q_r(j)c(h^*,r_j)
++
+\lambda_{\mathrm{resp}}\mathrm{KL}(q_r \| p_r)
 \right]
 $$
 
+The implemented closed-form solution is:
+
+$$
+q_r^*(j)
+=
+\frac{p_r(r_j)\exp(-c(h^*,r_j)/\lambda_{\mathrm{resp}})}
+{\sum_k p_r(r_k)\exp(-c(h^*,r_k)/\lambda_{\mathrm{resp}})}
+$$
+
+The corresponding joint distribution is:
+
+$$
+\gamma_{\mathrm{resp\_sample}}(i,j)
+=
+\delta(i=i^*)q_r^*(j)
+$$
+
+where $i^*$ indexes $h^*$.
+
+### 3.3 Response Model: Human Marginal
+
+The robot responds to the full human marginal $p_h$.
+
+First compute the expected cost of each robot trajectory:
+
+$$
+\bar c(r_j)
+=
+\sum_i p_h(h_i)c(h_i,r_j)
+$$
+
+Then:
+
+$$
+q_r^*(j)
+=
+\frac{p_r(r_j)\exp(-\bar c(r_j)/\lambda_{\mathrm{resp}})}
+{\sum_k p_r(r_k)\exp(-\bar c(r_k)/\lambda_{\mathrm{resp}})}
+$$
+
+The corresponding joint distribution is:
+
+$$
+\gamma_{\mathrm{resp\_marg}}(i,j)=p_h(h_i)q_r^*(j)
+$$
+
+### 3.4 NTC: KL(joint)
+
+This model regularizes the joint distribution toward the independent product distribution.
+
+$$
+\gamma_{\mathrm{joint}}^*
+=
+\arg\min_{\gamma}
+\left[
+\sum_{i,j}\gamma(i,j)c(h_i,r_j)
++
+\lambda_{\mathrm{joint}}\mathrm{KL}(\gamma \| p_hp_r)
+\right]
+$$
+
+The implemented closed form is:
+
+$$
+\gamma_{\mathrm{joint}}^*(i,j)
+=
+\frac{p_h(h_i)p_r(r_j)\exp(-c(h_i,r_j)/\lambda_{\mathrm{joint}})}
+{\sum_{a,b}p_h(h_a)p_r(r_b)\exp(-c(h_a,r_b)/\lambda_{\mathrm{joint}})}
+$$
+
+### 3.5 NTC: KL(marginals)
+
+This is the primary collaborative model.
+
+Let:
+
+$$
+\gamma_h(i)=\sum_j \gamma(i,j)
+$$
+
+and:
+
+$$
+\gamma_r(j)=\sum_i \gamma(i,j)
+$$
+
+The model solves:
+
+$$
+\gamma_{\mathrm{marg}}^*
+=
+\arg\min_{\gamma}
+\left[
+\sum_{i,j}\gamma(i,j)c(h_i,r_j)
++
+\lambda_h\mathrm{KL}(\gamma_h \| p_h)
++
+\lambda_r\mathrm{KL}(\gamma_r \| p_r)
+\right]
+$$
+
+In the current implementation, this is solved by iterative multiplicative updates.
+
 ---
 
-# Costs (examples)
+## 4. Pointwise Optimizer
 
-Let $d_t = \|h_t - r_t\|$
+The pointwise optimizer is a deterministic comparison against the modal OT solution.
 
-### Nominal
-$$
-c_{\text{nom}} = \sum_t w_t \left[\frac{1}{1 + e^{k(d_t - d_0)}} + e^{-d_t^2/\sigma^2}\right]
-$$
+Let $h_{\mathrm{lin}}$ and $r_{\mathrm{lin}}$ be the straight-line trajectories.
 
-### Collision
-$$
-c_{\text{coll}} = \mathbf{1}[\min_t d_t < d_{\text{thresh}}]
-$$
+Define the trajectory deviation scores:
 
-### MDP
 $$
-c_{\text{MDP}} = -\min_t d_t
+d_h(h_i)
+=
+\frac{1}{T}\sum_t \|h_i(t)-h_{\mathrm{lin}}(t)\|
 $$
 
-### ASD
 $$
-c_{\text{ASD}} = -\frac{1}{T}\sum_t d_t
+d_r(r_j)
+=
+\frac{1}{T}\sum_t \|r_j(t)-r_{\mathrm{lin}}(t)\|
+$$
+
+The cost matrix and deviation vectors are min-max normalized:
+
+$$
+\tilde c(i,j)
+=
+\frac{c(i,j)-\min_{a,b}c(a,b)}
+{\max_{a,b}c(a,b)-\min_{a,b}c(a,b)+\epsilon}
+$$
+
+$$
+\tilde d_h(i)
+=
+\frac{d_h(i)-\min_a d_h(a)}
+{\max_a d_h(a)-\min_a d_h(a)+\epsilon}
+$$
+
+$$
+\tilde d_r(j)
+=
+\frac{d_r(j)-\min_b d_r(b)}
+{\max_b d_r(b)-\min_b d_r(b)+\epsilon}
+$$
+
+The pointwise objective is:
+
+$$
+J_{\mathrm{pair}}(i,j)
+=
+\tilde c(i,j)
++
+\alpha_h \tilde d_h(i)
++
+\alpha_r \tilde d_r(j)
+$$
+
+The pointwise optimum is:
+
+$$
+(i_{\mathrm{pair}}^*,j_{\mathrm{pair}}^*)
+=
+\arg\min_{i,j}J_{\mathrm{pair}}(i,j)
+$$
+
+The OT modal pair is:
+
+$$
+(i_{\gamma}^*,j_{\gamma}^*)
+=
+\arg\max_{i,j}\gamma_{\mathrm{marg}}^*(i,j)
+$$
+
+In the current code:
+
+$$
+\alpha_h=\lambda_h, \qquad \alpha_r=\lambda_r
 $$
 
 ---
 
-# Metrics
+## 5. Metrics
 
-We evaluate:
+All metrics are computed for each trajectory pair $(h_i,r_j)$.
 
-- MDP (minimum distance)  
-- ASD (average distance)  
-- collisions  
-- imbalance  
-- PSC (passing consistency)  
-- efficiency  
+Expected metric values are computed using the model distribution.
 
-Expected value:
+For a joint distribution $\gamma$:
 
 $$
-\mathbb{E}_\gamma[\text{metric}] = \sum_{h,r} \gamma(h,r)\,\text{metric}(h,r)
+\mathbb{E}_{\gamma}[m]
+=
+\sum_{i,j}\gamma(i,j)m(h_i,r_j)
 $$
+
+For the fixed-sample response model:
+
+$$
+\mathbb{E}_{q_r}[m]
+=
+\sum_j q_r(j)m(h^*,r_j)
+$$
+
+### 5.1 Nominal Cost Metric
+
+Define:
+
+$$
+d_t=\|h_t-r_t\|
+$$
+
+The implemented nominal cost is:
+
+$$
+m_{\mathrm{nom}}(h,r)
+=
+\sum_{t=1}^T
+\frac{1}{t}
+\left[
+3\left(\frac{1}{1+\exp(12(d_t-0.65))}\right)
++
+7\exp\left(-\left(\frac{d_t}{0.22}\right)^2\right)
+\right]
+$$
+
+Smaller is better.
+
+### 5.2 Number of Collisions
+
+A trajectory pair has one collision if its minimum distance is at most the collision threshold:
+
+$$
+d_{\mathrm{collision}}=0.5
+$$
+
+$$
+m_{\mathrm{collision}}(h,r)
+=
+\mathbf{1}
+\left[
+\min_t \|h_t-r_t\| \leq 0.5
+\right]
+$$
+
+Smaller is better.
+
+### 5.3 Minimum Distance to Person
+
+$$
+m_{\mathrm{MDP}}(h,r)
+=
+\min_t \|h_t-r_t\|
+$$
+
+Larger is better.
+
+### 5.4 Average Safety Distance
+
+$$
+m_{\mathrm{ASD}}(h,r)
+=
+\frac{1}{T}\sum_{t=1}^T \|h_t-r_t\|
+$$
+
+Larger is better.
+
+### 5.5 Imbalance
+
+Let:
+
+$$
+\ell_h(h)=\max_t |y_h(t)|
+$$
+
+and:
+
+$$
+\ell_r(r)=\max_t |y_r(t)|
+$$
+
+The imbalance metric is:
+
+$$
+m_{\mathrm{imbalance}}(h,r)
+=
+|\ell_h(h)-\ell_r(r)|
+$$
+
+Smaller is better.
+
+### 5.6 Passing Side Consistency
+
+The current implementation computes passing side consistency using the midpoint of the trajectories.
+
+Let:
+
+$$
+t_{\mathrm{mid}}=\lfloor T/2 \rfloor
+$$
+
+Define:
+
+$$
+s_h=\mathrm{sign}(y_h(t_{\mathrm{mid}}))
+$$
+
+and:
+
+$$
+s_r=\mathrm{sign}(y_r(t_{\mathrm{mid}}))
+$$
+
+The current implemented PSC metric is:
+
+$$
+m_{\mathrm{PSC}}(h,r)
+=
+-s_hs_r
+$$
+
+Larger is better.
+
+Interpretation:
+
+- $m_{\mathrm{PSC}}=1$: agents pass on opposite sides
+- $m_{\mathrm{PSC}}=0$: at least one midpoint is on the centerline
+- $m_{\mathrm{PSC}}=-1$: agents pass on the same side
+
+Development note: this README matches the current code, but a time-averaged PSC may be preferable.
+
+### 5.7 Path Efficiency
+
+For a trajectory $z$, define path length:
+
+$$
+L(z)=\sum_{t=1}^{T-1}\|z_{t+1}-z_t\|
+$$
+
+and straight-line distance:
+
+$$
+D(z)=\|z_T-z_1\|
+$$
+
+The pairwise path efficiency metric is:
+
+$$
+m_{\mathrm{eff}}(h,r)
+=
+\frac{1}{2}
+\left[
+\frac{D(h)}{L(h)}
++
+\frac{D(r)}{L(r)}
+\right]
+$$
+
+Larger is better.
+
+### 5.8 Control Effort
+
+Let the discrete second difference be:
+
+$$
+a_z(t)=z_{t+2}-2z_{t+1}+z_t
+$$
+
+The implemented control effort metric is:
+
+$$
+m_{\mathrm{ctrl}}(h,r)
+=
+\sum_t \|a_h(t)\|^2
++
+\sum_t \|a_r(t)\|^2
+$$
+
+Smaller is better.
 
 ---
 
-# Collaboration Benefit
+## 6. Cost Functions
 
-All plots show:
+Every optimization cost is defined so that smaller is better. The implemented costs are derived from the metrics above.
+
+### 6.1 Nominal Cost
 
 $$
-\Delta E
-$$
-
-Defined as:
-
-- larger-is-better metrics:
-$$
-\Delta E = E_{\text{NTC}} - E_{\text{baseline}}
+c_{\mathrm{nom}}(h,r)=m_{\mathrm{nom}}(h,r)
 $$
 
-- smaller-is-better metrics:
+### 6.2 Collision Cost
+
 $$
-\Delta E = E_{\text{baseline}} - E_{\text{NTC}}
+c_{\mathrm{collision}}(h,r)=m_{\mathrm{collision}}(h,r)
 $$
+
+### 6.3 MDP Cost
+
+$$
+c_{\mathrm{MDP}}(h,r)=-m_{\mathrm{MDP}}(h,r)
+$$
+
+### 6.4 ASD Cost
+
+$$
+c_{\mathrm{ASD}}(h,r)=-m_{\mathrm{ASD}}(h,r)
+$$
+
+### 6.5 Imbalance Cost
+
+$$
+c_{\mathrm{imbalance}}(h,r)=m_{\mathrm{imbalance}}(h,r)
+$$
+
+### 6.6 PSC Cost
+
+$$
+c_{\mathrm{PSC}}(h,r)=\frac{1-m_{\mathrm{PSC}}(h,r)}{2}
+$$
+
+### 6.7 Control Effort Cost
+
+$$
+c_{\mathrm{ctrl}}(h,r)=m_{\mathrm{ctrl}}(h,r)
+$$
+
+### 6.8 Combined Cost
+
+The combined cost averages normalized versions of seven costs:
+
+$$
+c_{\mathrm{combined}}(h,r)
+=
+\frac{1}{7}
+\left[
+\tilde c_{\mathrm{nom}}
++
+\tilde c_{\mathrm{collision}}
++
+\tilde c_{\mathrm{MDP}}
++
+\tilde c_{\mathrm{ASD}}
++
+\tilde c_{\mathrm{imbalance}}
++
+\tilde c_{\mathrm{PSC}}
++
+\tilde c_{\mathrm{ctrl}}
+\right]
+$$
+
+Each component is min-max normalized over the current trajectory-pair library:
+
+$$
+\tilde c_k(i,j)
+=
+\frac{c_k(i,j)-\min_{a,b}c_k(a,b)}
+{\max_{a,b}c_k(a,b)-\min_{a,b}c_k(a,b)+\epsilon}
+$$
+
+Path efficiency is reported as a metric but is not included as a cost in the combined cost.
 
 ---
 
-## Interpretation
+## 7. Larger-Is-Better and Smaller-Is-Better Metrics
 
-- $\Delta E > 0$ → collaboration improves performance  
-- $\Delta E = 0$ → no benefit  
-- $\Delta E < 0$ → baseline better  
+Larger is better:
+
+- MDP
+- ASD
+- PSC
+- path efficiency
+
+Smaller is better:
+
+- nominal cost
+- number of collisions
+- imbalance
+- control effort
 
 ---
 
-# Plots
+## 8. Collaboration Benefit
 
-## Metric plots
+The primary model is NTC: KL(marginals). Each baseline is compared against it.
 
-- x-axis: $s$  
-- y-axis: $\Delta E$  
-- gray band ≈ negligible benefit  
-
----
-
-## Pointwise vs OT
+For larger-is-better metrics:
 
 $$
-\text{metric}(h^_{pair}, r^_{pair})
+\Delta E_{\mathrm{model}}[m]
+=
+\mathbb{E}_{\gamma_{\mathrm{marg}}^*}[m]
 -
-\text{metric}(h^_\gamma, r^_\gamma)
+\mathbb{E}_{\mathrm{model}}[m]
 $$
 
+For smaller-is-better metrics:
+
+$$
+\Delta E_{\mathrm{model}}[m]
+=
+\mathbb{E}_{\mathrm{model}}[m]
+-
+\mathbb{E}_{\gamma_{\mathrm{marg}}^*}[m]
+$$
+
+Therefore:
+
+- $\Delta E>0$: NTC: KL(marginals) improves performance over the baseline
+- $\Delta E=0$: no difference
+- $\Delta E<0$: baseline is better
+
 ---
 
-## Movies
+## 9. Plots
 
-Top:
-- green: OT samples  
-- red: OT mode  
-- black: pointwise optimum  
+### Metric Pages
 
-Bottom:
-- collaboration curves  
-- vertical line = current $s$
+The metric pages plot collaboration benefit.
+
+- x-axis: $s$
+- y-axis: $\Delta E$
+- one panel per metric
+- one curve per baseline comparison
+
+All metric pages use the same sign convention: positive means collaboration helps and negative means the baseline is better.
+
+### Pointwise vs OT Pages
+
+These plots compare the pointwise deterministic optimizer to the OT modal pair.
+
+The plotted value is:
+
+$$
+m(h_{i_{\mathrm{pair}}^*},r_{j_{\mathrm{pair}}^*})
+-
+m(h_{i_{\gamma}^*},r_{j_{\gamma}^*})
+$$
+
+This plot is not a collaboration benefit plot. It compares two selected trajectory pairs.
+
+### Movies
+
+Each movie frame corresponds to one value of $s$.
+
+Top panels:
+
+- green: top $K$ samples under the relevant distribution
+- red: OT mode, $\arg\max_{i,j}\gamma_{\mathrm{marg}}^*(i,j)$
+- black: pointwise optimum, $\arg\min_{i,j}J_{\mathrm{pair}}(i,j)$
+
+Bottom panels:
+
+- collaboration benefit curves
+- vertical red line shows the current value of $s$
 
 ---
 
-# Config (YAML)
+## 10. YAML Configuration
+
+The YAML file controls which costs and outputs are generated.
+
+Example:
 
 ```yaml
+costs_to_run:
+  - C_NOMINAL
+
+movie_costs:
+  - C_NOMINAL
+
 s_min: 0.5
-s_max: 10
+s_max: 10.0
 s_step: 0.5
+
+make_metric_pages: true
+make_pointwise_vs_ot_pages: true
+make_snapshot_pngs: false
+make_movies: true
+
+parallel: false
+max_workers:
+```
+
+Available costs:
+
+```yaml
+C_NOMINAL
+C_NUM_COLLISIONS
+C_MDP
+C_ASD
+C_IMBALANCE
+C_PSC
+C_CONTROL_EFFORT
+C_COMBINED
+```
+
+Available metrics:
+
+```yaml
+NOMINAL_COST
+NUM_COLLISIONS
+MDP
+ASD
+IMBALANCE
+PSC
+PATH_EFF
+CONTROL_EFFORT
+```
