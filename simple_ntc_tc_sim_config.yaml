@@ -29,11 +29,12 @@ s_min: 0.5
 s_max: 10.0
 s_step: 0.5
 
-make_metric_pages: true
-make_expected_metric_pages: true
-make_pointwise_vs_ot_pages: true
+make_metric_pages: false
+make_expected_metric_pages: false
+make_pointwise_vs_ot_pages: false
 make_snapshot_pngs: false
-make_movies: true
+make_movies: false
+make_gamma_cost_comparison_pages: true
 
 costs_to_run:
   - C_NOMINAL

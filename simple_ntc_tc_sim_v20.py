@@ -116,6 +116,7 @@ def load_config(path=DEFAULT_CONFIG_PATH):
         "s_max": 10.0,
         "s_step": 0.5,
         "make_expected_metric_pages": True,
+        "make_gamma_cost_comparison_pages": False,
         "parallel": False,
         "max_workers": None,
     }
@@ -743,6 +744,64 @@ def save_expected_metric_page(rows_for_cost, cost_name):
     plt.close(fig)
 
 
+
+
+
+def save_gamma_cost_comparison_page(rows_by_cost, costs_to_compare):
+    """
+    Compare the NTC KL(marginals) models indexed by optimization cost.
+
+    Each curve is one gamma*_c model.
+    Each panel is one metric: E_{gamma*_c}[metric | s].
+
+    This is not a DeltaE/collaboration-benefit plot.
+    """
+    if not costs_to_compare:
+        return
+
+    first_cost = costs_to_compare[0]
+    xs = [row["distance_m"] for row in rows_by_cost[first_cost]]
+
+    fig, axes = plt.subplots(4, 2, figsize=(16.0, 16.0), sharex=False)
+    axes = axes.ravel()
+
+    for ax, metric in zip(axes, METRIC_ORDER):
+        for cost_name in costs_to_compare:
+            rows_for_cost = rows_by_cost[cost_name]
+            ys = [row[f"E_marg_{metric}"] for row in rows_for_cost]
+
+            ax.plot(
+                xs,
+                ys,
+                linestyle="-",
+                linewidth=2.0,
+                label=f"gamma*_{COST_LABELS[cost_name]}",
+            )
+
+        ax.set_title(f"Expected {METRIC_LABELS[metric]} for each gamma*_c model")
+        ax.set_ylabel(f"E_gamma*[{METRIC_LABELS[metric]}]")
+        ax.set_xlabel("Start separation s (m)")
+        ax.set_xticks(xs)
+        ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
+        ax.grid(True, alpha=0.25)
+
+    axes[1].legend(loc="best", fontsize=8)
+    fig.suptitle(
+        "Comparison of NTC KL(marginals) models indexed by optimization cost",
+        y=0.995
+    )
+    fig.tight_layout()
+    fig.savefig(
+        OUTDIR / "expected_metric_page_gamma_cost_comparison.png",
+        dpi=180,
+        bbox_inches="tight",
+    )
+    plt.close(fig)
+
+
+
+
+
 def save_pair_vs_gamma_page(rows_for_cost, cost_name):
     xs = [row["distance_m"] for row in rows_for_cost]
     fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
@@ -999,6 +1058,11 @@ def main():
             if config["make_pointwise_vs_ot_pages"]:
                 print(f"Writing pointwise-vs-OT page for cost: {COST_LABELS[cost_name]}")
                 save_pair_vs_gamma_page(rows_by_cost[cost_name], cost_name)
+
+
+    if config.get("make_gamma_cost_comparison_pages", False):
+        print("Writing gamma cost-comparison expected metric page")
+        save_gamma_cost_comparison_page(rows_by_cost, costs_to_run)
 
     save_metrics_csv(rows)
 
