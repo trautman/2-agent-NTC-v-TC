@@ -19,6 +19,7 @@ LATERAL_LEVELS = np.array([0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.80, 1.00]
 
 TOP_K = 8
 COLLISION_DISTANCE_M = 0.5
+NO_BENEFIT_EPS = 0.05
 
 LAM_PREF = 1.6
 LAM_RESP_SAMPLE = 0.25
@@ -271,11 +272,24 @@ def sign_with_zero(x, eps=1e-9):
     return 0.0
 
 
+# def metric_psc_pair(tr_h, tr_r):
+#     mid_h = tr_h[len(tr_h) // 2, 1]
+#     mid_r = tr_r[len(tr_r) // 2, 1]
+#     return float(-sign_with_zero(mid_h) * sign_with_zero(mid_r))
 def metric_psc_pair(tr_h, tr_r):
-    mid_h = tr_h[len(tr_h) // 2, 1]
-    mid_r = tr_r[len(tr_r) // 2, 1]
-    return float(-sign_with_zero(mid_h) * sign_with_zero(mid_r))
+    y_h = tr_h[:, 1]
+    y_r = tr_r[:, 1]
 
+    # Ignore endpoints because trajectories begin/end on the centerline.
+    y_h = y_h[1:-1]
+    y_r = y_r[1:-1]
+
+    psc_t = np.array([
+        -sign_with_zero(yh) * sign_with_zero(yr)
+        for yh, yr in zip(y_h, y_r)
+    ])
+
+    return float(np.mean(psc_t))
 
 def metric_collision_pair(tr_h, tr_r):
     return 1.0 if metric_mdp(tr_h, tr_r) <= COLLISION_DISTANCE_M else 0.0
@@ -555,6 +569,22 @@ def model_plot_style(model_key):
     return styles[model_key]
 
 
+def find_no_benefit_cutoff(xs, panel_series, eps=NO_BENEFIT_EPS):
+    """
+    Returns the smallest s such that all model curves remain inside
+    [-eps, eps] for that s and every larger s.
+
+    If no such cutoff exists, returns None.
+    """
+    arr = np.vstack(panel_series)
+    inside = np.all(np.abs(arr) <= eps, axis=0)
+
+    for k in range(len(xs)):
+        if np.all(inside[k:]):
+            return xs[k]
+
+    return None
+
 def save_metric_page(rows_for_cost, cost_name):
     xs = [row["distance_m"] for row in rows_for_cost]
     fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
@@ -567,18 +597,45 @@ def save_metric_page(rows_for_cost, cost_name):
     ]
     for ax, metric in zip(axes, METRIC_ORDER):
         panel_vals = []
+        panel_series = []
         for model_key, label in model_keys:
             # ys = [row[f"DeltaE_{model_key}_{metric}"] for row in rows_for_cost]
             ys = [row[f"DeltaE_{model_key}_{metric}"] for row in rows_for_cost]
             panel_vals.extend(ys)
+            panel_series.append(np.array(ys, dtype=float))
             style = model_plot_style(model_key)
-            # ax.plot(xs, ys, marker=style["marker"], linestyle=style["linestyle"], linewidth=2.0, label=label)
-            ax.plot(xs, ys, marker="o", linestyle="-", linewidth=2.0, label=label)
+            if metric == "PSC":
+                style = model_plot_style(model_key)
+                ax.plot(
+                    xs,
+                    ys,
+                    marker=style["marker"],
+                    linestyle="-",
+                    linewidth=2.0,
+                    markersize=5,
+                    label=label,
+                )
+            else:
+                ax.plot(xs, ys, marker="o", linestyle="-", linewidth=2.0, label=label)
         ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
-        # max_abs = max(max(abs(v) for v in panel_vals), 1e-12)
-        # ax.axhspan(-0.10 * max_abs, 0.10 * max_abs, color="gray", alpha=0.10)
-        ax.axhspan(-0.05, 0.05, color="gray", alpha=0.15)
-        # ax.set_title(f"Expected {METRIC_LABELS[metric]} improvement due to collaboration")
+        # ax.axhspan(-0.05, 0.05, color="gray", alpha=0.15)
+        ax.axhspan(
+            -NO_BENEFIT_EPS,
+            NO_BENEFIT_EPS,
+            color="gray",
+            alpha=0.15,
+            label="negligible benefit band"
+        )
+        s_cutoff = find_no_benefit_cutoff(xs, panel_series)
+
+        if s_cutoff is not None:
+            ax.axvline(
+                s_cutoff,
+                color="purple",
+                linewidth=2.0,
+                linestyle=":",
+                label=f"s*={s_cutoff:g}"
+            )
         ax.set_title(f"Collaboration benefit: {METRIC_LABELS[metric]}")
         ax.set_ylabel(METRIC_YLABELS[metric])
         ax.set_xlabel("Start separation s (m)")
@@ -592,98 +649,98 @@ def save_metric_page(rows_for_cost, cost_name):
     plt.close(fig)
 
 
-# def save_expected_metric_page(rows_for_cost, cost_name):
-#     xs = [row["distance_m"] for row in rows_for_cost]
-#     fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
-#     axes = axes.ravel()
-#     model_keys = [("ind", "TC: p_h p_r"), ("resp_sample", "TC: q_r*delta(h-h*)"), ("resp_marg", "TC: q_r*p_h"), ("joint", "NTC: KL(joint)"), ("marg", "NTC: KL(marginals)")]
-#     for ax, metric in zip(axes, METRIC_ORDER):
-#         for model_key, label in model_keys:
-#             ys = [row[f"E_{model_key}_{metric}"] for row in rows_for_cost]
-#             if model_key == "marg":
-#                 ax.plot(xs, ys, marker="*", linestyle="-", linewidth=2.5, label=label)
-#             else:
-#                 style = model_plot_style(model_key)
-#                 ax.plot(xs, ys, marker=style["marker"], linestyle=style["linestyle"], linewidth=1.8, label=label)
-#         ax.set_title(f"Expected {METRIC_LABELS[metric]} by model")
-#         ax.set_ylabel(METRIC_LABELS[metric])
-#         ax.set_xlabel("Start separation s (m)")
-#         ax.set_xticks(xs)
-#         ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#         ax.grid(True, alpha=0.25)
-#     axes[1].legend(loc="best", fontsize=8)
-#     fig.suptitle(f"Raw expected metrics for optimization cost: {COST_LABELS[cost_name]}", y=0.995)
-#     fig.tight_layout()
-#     fig.savefig(OUTDIR / f"expected_metric_page_{COST_LABELS[cost_name]}.png", dpi=180, bbox_inches="tight")
-#     plt.close(fig)
-# def save_expected_metric_page(rows_for_cost, cost_name):
-#     xs = [row["distance_m"] for row in rows_for_cost]
+def save_expected_metric_page(rows_for_cost, cost_name):
+    xs = [row["distance_m"] for row in rows_for_cost]
+    fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
+    axes = axes.ravel()
+    model_keys = [("ind", "TC: p_h p_r"), ("resp_sample", "TC: q_r*delta(h-h*)"), ("resp_marg", "TC: q_r*p_h"), ("joint", "NTC: KL(joint)"), ("marg", "NTC: KL(marginals)")]
+    for ax, metric in zip(axes, METRIC_ORDER):
+        for model_key, label in model_keys:
+            ys = [row[f"E_{model_key}_{metric}"] for row in rows_for_cost]
+            if model_key == "marg":
+                ax.plot(xs, ys, marker="*", linestyle="-", linewidth=2.5, label=label)
+            else:
+                style = model_plot_style(model_key)
+                ax.plot(xs, ys, marker=style["marker"], linestyle=style["linestyle"], linewidth=1.8, label=label)
+        ax.set_title(f"Expected {METRIC_LABELS[metric]} by model")
+        ax.set_ylabel(METRIC_LABELS[metric])
+        ax.set_xlabel("Start separation s (m)")
+        ax.set_xticks(xs)
+        ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
+        ax.grid(True, alpha=0.25)
+    axes[1].legend(loc="best", fontsize=8)
+    fig.suptitle(f"Raw expected metrics for optimization cost: {COST_LABELS[cost_name]}", y=0.995)
+    fig.tight_layout()
+    fig.savefig(OUTDIR / f"expected_metric_page_{COST_LABELS[cost_name]}.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+def save_expected_metric_page(rows_for_cost, cost_name):
+    xs = [row["distance_m"] for row in rows_for_cost]
 
-#     fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
-#     axes = axes.ravel()
+    fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
+    axes = axes.ravel()
 
-#     model_keys = [
-#         ("ind", "TC: p_h p_r"),
-#         ("resp_sample", "TC: q_r*delta(h-h*)"),
-#         ("resp_marg", "TC: q_r*p_h"),
-#         ("joint", "NTC: KL(joint)"),
-#         ("marg", "NTC: KL(marginals)"),
-#     ]
+    model_keys = [
+        ("ind", "TC: p_h p_r"),
+        ("resp_sample", "TC: q_r*delta(h-h*)"),
+        ("resp_marg", "TC: q_r*p_h"),
+        ("joint", "NTC: KL(joint)"),
+        ("marg", "NTC: KL(marginals)"),
+    ]
 
-#     for ax, metric in zip(axes, METRIC_ORDER):
-#         ref = np.array([row[f"E_marg_{metric}"] for row in rows_for_cost], dtype=float)
+    for ax, metric in zip(axes, METRIC_ORDER):
+        ref = np.array([row[f"E_marg_{metric}"] for row in rows_for_cost], dtype=float)
 
-#         panel_vals = []
-#         for model_key, label in model_keys:
-#             ys = np.array([row[f"E_{model_key}_{metric}"] for row in rows_for_cost], dtype=float)
-#             panel_vals.extend(list(ys))
+        panel_vals = []
+        for model_key, label in model_keys:
+            ys = np.array([row[f"E_{model_key}_{metric}"] for row in rows_for_cost], dtype=float)
+            panel_vals.extend(list(ys))
 
-#             if model_key == "marg":
-#                 ax.plot(
-#                     xs,
-#                     ys,
-#                     linewidth=3.0,
-#                     label=label
-#                 )
-#             else:
-#                 ax.plot(
-#                     xs,
-#                     ys,
-#                     linewidth=2.0,
-#                     label=label
-#                 )
+            if model_key == "marg":
+                ax.plot(
+                    xs,
+                    ys,
+                    linewidth=3.0,
+                    label=label
+                )
+            else:
+                ax.plot(
+                    xs,
+                    ys,
+                    linewidth=2.0,
+                    label=label
+                )
 
-#         max_abs = max(max(abs(v) for v in panel_vals), 1e-12)
-#         band = 0.10 * max_abs
+        max_abs = max(max(abs(v) for v in panel_vals), 1e-12)
+        band = 0.10 * max_abs
 
-#         ax.fill_between(
-#             xs,
-#             ref - band,
-#             ref + band,
-#             color="gray",
-#             alpha=0.12,
-#             label="within 10% of NTC KL(marginals)"
-#         )
+        ax.fill_between(
+            xs,
+            ref - band,
+            ref + band,
+            color="gray",
+            alpha=0.12,
+            label="within 10% of NTC KL(marginals)"
+        )
 
-#         ax.set_title(f"Expected {METRIC_LABELS[metric]} values")
-#         ax.set_ylabel(f"E[{METRIC_LABELS[metric]}]")
-#         ax.set_xlabel("Start separation s (m)")
-#         ax.set_xticks(xs)
-#         ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#         ax.grid(True, alpha=0.25)
+        ax.set_title(f"Expected {METRIC_LABELS[metric]} values")
+        ax.set_ylabel(f"E[{METRIC_LABELS[metric]}]")
+        ax.set_xlabel("Start separation s (m)")
+        ax.set_xticks(xs)
+        ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
+        ax.grid(True, alpha=0.25)
 
-#     axes[1].legend(loc="best", fontsize=8)
-#     fig.suptitle(
-#         f"Expected metric values for optimization cost: {COST_LABELS[cost_name]}",
-#         y=0.995
-#     )
-#     fig.tight_layout()
-#     fig.savefig(
-#         OUTDIR / f"expected_metric_page_{COST_LABELS[cost_name]}.png",
-#         dpi=180,
-#         bbox_inches="tight"
-#     )
-#     plt.close(fig)
+    axes[1].legend(loc="best", fontsize=8)
+    fig.suptitle(
+        f"Expected metric values for optimization cost: {COST_LABELS[cost_name]}",
+        y=0.995
+    )
+    fig.tight_layout()
+    fig.savefig(
+        OUTDIR / f"expected_metric_page_{COST_LABELS[cost_name]}.png",
+        dpi=180,
+        bbox_inches="tight"
+    )
+    plt.close(fig)
 
 
 def save_pair_vs_gamma_page(rows_for_cost, cost_name):
@@ -804,18 +861,33 @@ def render_metric_panels_on_axes(field_axes, rows_for_cost, current_s, metric_su
     for ax, metric in zip(field_axes, metric_subset):
         ax.clear()
         panel_vals = []
+        panel_series = []
         for model_key, label in model_keys:
             ys = [row[f"DeltaE_{model_key}_{metric}"] for row in rows_for_cost]
             panel_vals.extend(ys)
+            panel_series.append(np.array(ys, dtype=float))
             style = model_plot_style(model_key)
-            # ax.plot(xs, ys, marker=style["marker"], linestyle=style["linestyle"], linewidth=1.5, label=label)
             ax.plot(xs, ys, marker="o", linestyle="-", linewidth=2.0, label=label)
         ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
-        # max_abs = max(max(abs(v) for v in panel_vals), 1e-12)
-        # ax.axhspan(-0.10 * max_abs, 0.10 * max_abs, color="gray", alpha=0.10)
-        ax.axhspan(-0.05, 0.05, color="gray", alpha=0.15)
+
+        # ax.axhspan(-0.05, 0.05, color="gray", alpha=0.15)
+        ax.axhspan(
+            -NO_BENEFIT_EPS,
+            NO_BENEFIT_EPS,
+            color="gray",
+            alpha=0.15
+        )
+        s_cutoff = find_no_benefit_cutoff(xs, panel_series)
+
+        if s_cutoff is not None:
+            ax.axvline(
+                s_cutoff,
+                color="purple",
+                linewidth=2.0,
+                linestyle=":",
+                label=f"s*={s_cutoff:g}"
+            )
         ax.axvline(current_s, color="red", linewidth=2.0, linestyle=":")
-        # ax.set_title(f"Expected {METRIC_LABELS[metric]} improvement", fontsize=10)
         ax.set_title(f"Collaboration benefit: {METRIC_LABELS[metric]}")
         ax.set_ylabel(METRIC_YLABELS[metric])
         ax.set_xlabel("s (m)")
@@ -909,17 +981,7 @@ def main():
 
     rows.sort(key=lambda r: (COST_ORDER.index(r["cost_name"]), r["distance_m"]))
 
-    # if config["make_metric_pages"] or config["make_pointwise_vs_ot_pages"]:
-    #     for cost_name in costs_to_run:
-    #         if config["make_metric_pages"]:
-    #             print(f"Writing metric page for cost: {COST_LABELS[cost_name]}")
-    #             save_metric_page(rows_by_cost[cost_name], cost_name)
-    #         if config.get("make_expected_metric_pages", False):
-    #             print(f"Writing raw expected metric page for cost: {COST_LABELS[cost_name]}")
-    #             save_expected_metric_page(rows_by_cost[cost_name], cost_name)
-    #         if config["make_pointwise_vs_ot_pages"]:
-    #             print(f"Writing pointwise-vs-OT page for cost: {COST_LABELS[cost_name]}")
-    #             save_pair_vs_gamma_page(rows_by_cost[cost_name], cost_name)
+
     if (
         config["make_metric_pages"]
         or config.get("make_expected_metric_pages", True)
@@ -928,7 +990,7 @@ def main():
         for cost_name in costs_to_run:
             if config.get("make_expected_metric_pages", True):
                 print(f"Writing expected metric page for cost: {COST_LABELS[cost_name]}")
-                # save_expected_metric_page(rows_by_cost[cost_name], cost_name)
+                save_expected_metric_page(rows_by_cost[cost_name], cost_name)
 
             if config["make_metric_pages"]:
                 print(f"Writing DeltaE metric page for cost: {COST_LABELS[cost_name]}")

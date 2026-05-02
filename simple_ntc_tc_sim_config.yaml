@@ -4,11 +4,15 @@
 #   C_NOMINAL
 #   C_NUM_COLLISIONS
 #   C_MDP
-#   C_ASD
-#   C_IMBALANCE
-#   C_PSC
-#   C_CONTROL_EFFORT
-#   C_COMBINED
+# costs_to_run:
+#   - C_NOMINAL
+#   - C_NUM_COLLISIONS
+#   - C_MDP
+#   - C_ASD
+#   - C_IMBALANCE
+#   - C_PSC
+#   - C_CONTROL_EFFORT
+#   - C_COMBINED
 #
 # Available metrics:
 #   NOMINAL_COST
@@ -18,18 +22,12 @@
 #   IMBALANCE
 #   PSC
 #   PATH_EFF
-#   CONTROL_EFFORT
+#   CONTROL_EFFOR
 
-make_expected_metric_pages: true
-make_metric_pages: true
-make_pointwise_vs_ot_pages: true
 
 s_min: 0.5
 s_max: 10.0
 s_step: 0.5
-
-costs_to_run:
-  - C_NOMINAL
 
 make_metric_pages: true
 make_expected_metric_pages: true
@@ -37,8 +35,25 @@ make_pointwise_vs_ot_pages: true
 make_snapshot_pngs: false
 make_movies: true
 
+costs_to_run:
+  - C_NOMINAL
+  - C_NUM_COLLISIONS
+  - C_MDP
+  - C_ASD
+  - C_IMBALANCE
+  - C_PSC
+  - C_CONTROL_EFFORT
+  - C_COMBINED
+
 movie_costs:
   - C_NOMINAL
+  - C_NUM_COLLISIONS
+  - C_MDP
+  - C_ASD
+  - C_IMBALANCE
+  - C_PSC
+  - C_CONTROL_EFFORT
+  - C_COMBINED
 
 movie_metric_sets:
   metrics_safety:
@@ -61,5 +76,5 @@ snapshot_distances:
   - 1.5
   - 0.5
 
-parallel: false
-max_workers:
+parallel: true
+max_workers: 16
