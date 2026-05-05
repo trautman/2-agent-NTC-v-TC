@@ -18,7 +18,7 @@ DEFAULT_MOVIE_DISTANCES = DEFAULT_FIELD_DISTANCES[::-1]
 LATERAL_LEVELS = np.array([0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.80, 1.00], dtype=float)
 
 TOP_K = 8
-COLLISION_DISTANCE_M = 0.5
+COLLISION_DISTANCE_M = 0.6
 NO_BENEFIT_EPS = 0.05
 
 LAM_PREF = 1.6
@@ -30,48 +30,63 @@ LAM_R = 0.30
 ALPHA_H = LAM_H
 ALPHA_R = LAM_R
 
+
 METRIC_ORDER = [
     "NOMINAL_COST",
+    "COUPLING_GAIN",
     "NUM_COLLISIONS",
     "MDP",
     "ASD",
+    "MIN_EXPECTED_DISTANCE",
+    "MEAN_EXPECTED_DISTANCE",
+    "MAX_COLLISION_RISK",
     "IMBALANCE",
     "PSC",
     "PATH_EFF",
-    "CONTROL_EFFORT",
 ]
+
 
 METRIC_LABELS = {
     "NOMINAL_COST": "cost",
+    "COUPLING_GAIN": "coupling_gain",
     "NUM_COLLISIONS": "num_collisions",
     "MDP": "MDP",
     "ASD": "ASD",
     "IMBALANCE": "imbalance",
     "PSC": "PSC",
     "PATH_EFF": "path_efficiency",
-    "CONTROL_EFFORT": "control_effort",
+    "MIN_EXPECTED_DISTANCE": "min_expected_distance",
+    "MEAN_EXPECTED_DISTANCE": "mean_expected_distance",
+    "MAX_COLLISION_RISK": "max_collision_risk",
 }
 
 METRIC_YLABELS = {
     "NOMINAL_COST": "Delta cost",
+    "COUPLING_GAIN": "Delta coupling gain",
     "NUM_COLLISIONS": "Delta num_collisions",
     "MDP": "Delta MDP (m)",
     "ASD": "Delta ASD (m)",
     "IMBALANCE": "Delta imbalance (m)",
     "PSC": "Delta PSC",
     "PATH_EFF": "Delta path efficiency",
-    "CONTROL_EFFORT": "Delta control effort",
+    "MIN_EXPECTED_DISTANCE": "Delta min_expected_distance (m)",
+    "MEAN_EXPECTED_DISTANCE": "Delta mean_expected_distance (m)",
+    "MAX_COLLISION_RISK": "Delta max_collision_risk",
 }
+
 
 METRIC_BETTER = {
     "NOMINAL_COST": "smaller",
+    "COUPLING_GAIN": "larger",
     "NUM_COLLISIONS": "smaller",
     "MDP": "larger",
     "ASD": "larger",
     "IMBALANCE": "smaller",
     "PSC": "larger",
     "PATH_EFF": "larger",
-    "CONTROL_EFFORT": "smaller",
+    "MIN_EXPECTED_DISTANCE": "larger",
+    "MEAN_EXPECTED_DISTANCE": "larger",
+    "MAX_COLLISION_RISK": "smaller",
 }
 
 COST_ORDER = [
@@ -81,7 +96,7 @@ COST_ORDER = [
     "C_ASD",
     "C_IMBALANCE",
     "C_PSC",
-    "C_CONTROL_EFFORT",
+    # "C_CONTROL_EFFORT",
     "C_COMBINED",
 ]
 
@@ -92,7 +107,7 @@ COST_LABELS = {
     "C_ASD": "c_ASD",
     "C_IMBALANCE": "c_imbalance",
     "C_PSC": "c_PSC",
-    "C_CONTROL_EFFORT": "c_control_effort",
+    # "C_CONTROL_EFFORT": "c_control_effort",
     "C_COMBINED": "c_combined",
 }
 
@@ -102,6 +117,7 @@ DEFAULT_CONFIG_PATH = Path("simple_ntc_tc_sim_config.yaml")
 def load_config(path=DEFAULT_CONFIG_PATH):
     default_config = {
         "costs_to_run": ["C_NOMINAL"],
+        "make_individual_metric_plots": False,
         "make_metric_pages": True,
         "make_pointwise_vs_ot_pages": True,
         "make_snapshot_pngs": False,
@@ -111,14 +127,21 @@ def load_config(path=DEFAULT_CONFIG_PATH):
             "metrics_safety": ["NOMINAL_COST", "NUM_COLLISIONS", "ASD", "MDP"],
             "metrics_coord_effort": ["IMBALANCE", "PSC", "PATH_EFF", "CONTROL_EFFORT"],
         },
-        "snapshot_distances": [10.0, 7.5, 5.0, 3.5, 2.5, 1.5, 0.5],
-        "s_min": 0.5,
+        "snapshot_distances": [10.0, 7.5, 5.0, 3.5, 2.5, 1.5, 1.0],
+        "s_min": 1.0,
         "s_max": 10.0,
         "s_step": 0.5,
         "make_expected_metric_pages": True,
         "make_gamma_cost_comparison_pages": False,
+        "make_coupling_gain_comparison_pages": False,
         "parallel": False,
         "max_workers": None,
+        "nominal_time_discount": False,
+        "discount_metrics_by_time": False,
+                "metrics_to_plot": METRIC_ORDER.copy(),
+        "models_to_plot": ["ind", "resp_sample", "resp_marg", "marg"],
+        "no_benefit_rel_threshold": 0.05,
+        "show_bands": True,
     }
 
     if not path.exists():
@@ -143,6 +166,9 @@ def validate_config(config):
         for metric in metrics:
             if metric not in METRIC_ORDER:
                 raise ValueError(f"Unknown metric in movie_metric_sets: {metric}")
+    for metric_name in config["metrics_to_plot"]:
+        if metric_name not in METRIC_ORDER:
+            raise ValueError(f"Unknown metric in metrics_to_plot: {metric_name}")
     if config["s_step"] <= 0:
         raise ValueError("s_step must be positive")
     if config["s_max"] < config["s_min"]:
@@ -166,6 +192,9 @@ def logsumexp(arr):
 def softmax_from_logweights(logw):
     return np.exp(logw - logsumexp(logw))
 
+
+def kl_divergence(p, q, eps=1e-300):
+    return float(np.sum(p * (np.log(p + eps) - np.log(q + eps))))
 
 def lateral_profile(tau, profile_id=0):
     if profile_id == 0:
@@ -224,22 +253,58 @@ def preference_cost(traj):
     )
 
 
-def nominal_pairwise_cost(tr_h, tr_r):
+def nominal_pairwise_cost(tr_h, tr_r, nominal_time_discount=False):
     d = np.linalg.norm(tr_h - tr_r, axis=1)
     t = np.arange(1, len(tr_h) + 1)
-    w = 1.0 / t
+
+    if nominal_time_discount:
+        w = 1.0 / t
+    else:
+        w = np.ones_like(t, dtype=float)
+
     comfort_barrier = 1.0 / (1.0 + np.exp(12.0 * (d - 0.65)))
     overlap = np.exp(-(d / 0.22) ** 2)
     return float(np.sum(w * (3.0 * comfort_barrier + 7.0 * overlap)))
 
 
+def closest_approach(tr_h, tr_r):
+    d = np.linalg.norm(tr_h - tr_r, axis=1)
+    idx = int(np.argmin(d))
+    t = idx + 1  # 1-indexed time, consistent with nominal cost
+    return float(d[idx]), t
+
+
 def metric_mdp(tr_h, tr_r):
-    return float(np.min(np.linalg.norm(tr_h - tr_r, axis=1)))
+    d_min, _ = closest_approach(tr_h, tr_r)
+    return d_min
+
+
+def metric_mdp_discounted(tr_h, tr_r):
+    d_min, t_min = closest_approach(tr_h, tr_r)
+    return float(d_min / float(t_min))
 
 
 def metric_asd(tr_h, tr_r):
     return float(np.mean(np.linalg.norm(tr_h - tr_r, axis=1)))
 
+def pairwise_distance_time_matrix(H, R):
+    N, M = len(H), len(R)
+    T = H.shape[1]
+    D = np.zeros((N, M, T))
+
+    for i in range(N):
+        for j in range(M):
+            D[i, j, :] = np.linalg.norm(H[i] - R[j], axis=1)
+
+    return D
+
+
+def expected_distance_over_time(gamma, D):
+    return np.sum(gamma[:, :, None] * D, axis=(0, 1))
+
+
+def collision_risk_over_time(gamma, D, threshold=COLLISION_DISTANCE_M):
+    return np.sum(gamma[:, :, None] * (D < threshold), axis=(0, 1))
 
 def path_length(tr):
     return float(np.sum(np.linalg.norm(np.diff(tr, axis=0), axis=1)))
@@ -292,8 +357,16 @@ def metric_psc_pair(tr_h, tr_r):
 
     return float(np.mean(psc_t))
 
-def metric_collision_pair(tr_h, tr_r):
-    return 1.0 if metric_mdp(tr_h, tr_r) <= COLLISION_DISTANCE_M else 0.0
+def metric_collision_pair(tr_h, tr_r, discount_collision_by_time=False):
+    d_min, t_min = closest_approach(tr_h, tr_r)
+
+    if d_min > COLLISION_DISTANCE_M:
+        return 0.0
+
+    if discount_collision_by_time:
+        return 1.0 / float(t_min)
+
+    return 1.0
 
 
 def normalize_matrix(mat, eps=1e-12):
@@ -314,39 +387,79 @@ def build_snapshot(snapshot_dist, T=31):
     return H, R, h_linear, r_linear, meta_h, meta_r
 
 
-def compute_pairwise_metric_matrices(H, R):
+def compute_pairwise_metric_matrices(
+        H,
+        R,
+        nominal_time_discount=False,
+        discount_metrics_by_time=False,
+    ):
     N, M = len(H), len(R)
-    mats = {name: np.zeros((N, M)) for name in METRIC_ORDER}
+    # mats = {name: np.zeros((N, M)) for name in METRIC_ORDER}
+    PAIRWISE_METRICS = [name for name in METRIC_ORDER if name != "COUPLING_GAIN"]
+    mats = {name: np.zeros((N, M)) for name in PAIRWISE_METRICS}
     for i in range(N):
         for j in range(M):
             h, r = H[i], R[j]
-            mats["NOMINAL_COST"][i, j] = nominal_pairwise_cost(h, r)
-            mats["NUM_COLLISIONS"][i, j] = metric_collision_pair(h, r)
-            mats["MDP"][i, j] = metric_mdp(h, r)
+            mats["NOMINAL_COST"][i, j] = nominal_pairwise_cost(
+                h,
+                r,
+                nominal_time_discount=nominal_time_discount,
+            )
+            mats["NUM_COLLISIONS"][i, j] = metric_collision_pair(
+                h,
+                r,
+                discount_collision_by_time=discount_metrics_by_time,
+            )
+
+            if discount_metrics_by_time:
+                mats["MDP"][i, j] = metric_mdp_discounted(h, r)
+            else:
+                mats["MDP"][i, j] = metric_mdp(h, r)
             mats["ASD"][i, j] = metric_asd(h, r)
             mats["IMBALANCE"][i, j] = metric_imbalance_pair(h, r)
             mats["PSC"][i, j] = metric_psc_pair(h, r)
             mats["PATH_EFF"][i, j] = metric_path_efficiency_pair(h, r)
-            mats["CONTROL_EFFORT"][i, j] = metric_control_effort_pair(h, r)
+            # mats["CONTROL_EFFORT"][i, j] = metric_control_effort_pair(h, r)
     return mats
 
 
-def compute_response_sample_metric_vectors(h_linear, R):
-    vecs = {name: np.zeros(len(R)) for name in METRIC_ORDER}
+def compute_response_sample_metric_vectors(
+        h_linear,
+        R,
+        nominal_time_discount=False,
+        discount_metrics_by_time=False,
+    ):
+    # vecs = {name: np.zeros(len(R)) for name in METRIC_ORDER}
+    PAIRWISE_METRICS = [name for name in METRIC_ORDER if name != "COUPLING_GAIN"]
+    vecs = {name: np.zeros(len(R)) for name in PAIRWISE_METRICS}
     for j, r in enumerate(R):
         h = h_linear
-        vecs["NOMINAL_COST"][j] = nominal_pairwise_cost(h, r)
-        vecs["NUM_COLLISIONS"][j] = metric_collision_pair(h, r)
-        vecs["MDP"][j] = metric_mdp(h, r)
+        vecs["NOMINAL_COST"][j] = nominal_pairwise_cost(
+            h,
+            r,
+            nominal_time_discount=nominal_time_discount,
+        )
+        vecs["NUM_COLLISIONS"][j] = metric_collision_pair(
+            h,
+            r,
+            discount_collision_by_time=discount_metrics_by_time,
+        )
+
+        if discount_metrics_by_time:
+            vecs["MDP"][j] = metric_mdp_discounted(h, r)
+        else:
+            vecs["MDP"][j] = metric_mdp(h, r)
         vecs["ASD"][j] = metric_asd(h, r)
         vecs["IMBALANCE"][j] = metric_imbalance_pair(h, r)
         vecs["PSC"][j] = metric_psc_pair(h, r)
         vecs["PATH_EFF"][j] = metric_path_efficiency_pair(h, r)
-        vecs["CONTROL_EFFORT"][j] = metric_control_effort_pair(h, r)
+        # vecs["CONTROL_EFFORT"][j] = metric_control_effort_pair(h, r)
     return vecs
 
 
 def metric_to_cost_matrix(metric_name, metric_matrix):
+    if metric_name == "COUPLING_GAIN":
+        raise ValueError("COUPLING_GAIN is distribution-level and cannot be used as a pairwise cost.")
     if metric_name in ["NOMINAL_COST", "NUM_COLLISIONS", "IMBALANCE", "CONTROL_EFFORT"]:
         return metric_matrix.copy()
     if metric_name in ["MDP", "ASD", "PATH_EFF"]:
@@ -364,17 +477,29 @@ def build_cost_matrices(metric_mats):
         "C_ASD": metric_to_cost_matrix("ASD", metric_mats["ASD"]),
         "C_IMBALANCE": metric_to_cost_matrix("IMBALANCE", metric_mats["IMBALANCE"]),
         "C_PSC": metric_to_cost_matrix("PSC", metric_mats["PSC"]),
-        "C_CONTROL_EFFORT": metric_to_cost_matrix("CONTROL_EFFORT", metric_mats["CONTROL_EFFORT"]),
+        # "C_CONTROL_EFFORT": metric_to_cost_matrix("CONTROL_EFFORT", metric_mats["CONTROL_EFFORT"]),
     }
+    # combined_terms = [normalize_matrix(costs[name]) for name in [
+    #     "C_NOMINAL", "C_NUM_COLLISIONS", "C_MDP", "C_ASD", "C_IMBALANCE", "C_PSC", "C_CONTROL_EFFORT"
+    # ]]
     combined_terms = [normalize_matrix(costs[name]) for name in [
-        "C_NOMINAL", "C_NUM_COLLISIONS", "C_MDP", "C_ASD", "C_IMBALANCE", "C_PSC", "C_CONTROL_EFFORT"
+        "C_NOMINAL",
+        "C_NUM_COLLISIONS",
+        "C_MDP",
+        "C_ASD",
+        "C_IMBALANCE",
+        "C_PSC",
     ]]
     costs["C_COMBINED"] = sum(combined_terms) / len(combined_terms)
     return costs
 
 
-def response_cost_vector_from_name(cost_name, h_linear, R):
-    vecs = compute_response_sample_metric_vectors(h_linear, R)
+def response_cost_vector_from_name(cost_name, h_linear, R, nominal_time_discount=False):
+    vecs = compute_response_sample_metric_vectors(
+        h_linear,
+        R,
+        nominal_time_discount=nominal_time_discount,
+    )
     if cost_name == "C_NOMINAL":
         return vecs["NOMINAL_COST"]
     if cost_name == "C_NUM_COLLISIONS":
@@ -387,12 +512,16 @@ def response_cost_vector_from_name(cost_name, h_linear, R):
         return vecs["IMBALANCE"]
     if cost_name == "C_PSC":
         return (1.0 - vecs["PSC"]) / 2.0
-    if cost_name == "C_CONTROL_EFFORT":
-        return vecs["CONTROL_EFFORT"]
+    # if cost_name == "C_CONTROL_EFFORT":
+    #     return vecs["CONTROL_EFFORT"]
     if cost_name == "C_COMBINED":
         component_costs = [
-            vecs["NOMINAL_COST"], vecs["NUM_COLLISIONS"], -vecs["MDP"], -vecs["ASD"],
-            vecs["IMBALANCE"], (1.0 - vecs["PSC"]) / 2.0, vecs["CONTROL_EFFORT"]
+            vecs["NOMINAL_COST"],
+            vecs["NUM_COLLISIONS"],
+            -vecs["MDP"],
+            -vecs["ASD"],
+            vecs["IMBALANCE"],
+            (1.0 - vecs["PSC"]) / 2.0,
         ]
         return sum(normalize_matrix(v) for v in component_costs) / len(component_costs)
     raise ValueError(f"Unknown cost_name={cost_name}")
@@ -428,6 +557,16 @@ def expected_joint(gamma, mat):
     return float(np.sum(gamma * mat))
 
 
+def compute_time_indexed_metrics(gamma, D):
+    expected_d_t = expected_distance_over_time(gamma, D)
+    collision_risk_t = collision_risk_over_time(gamma, D)
+
+    return {
+        "MIN_EXPECTED_DISTANCE": float(np.min(expected_d_t)),
+        "MEAN_EXPECTED_DISTANCE": float(np.mean(expected_d_t)),
+        "MAX_COLLISION_RISK": float(np.max(collision_risk_t)),
+    }
+
 def expected_robot(q_r, vec):
     return float(np.sum(q_r * vec))
 
@@ -440,37 +579,131 @@ def solve_pointwise_pair(H, R, h_linear, r_linear, cost_matrix):
     return np.unravel_index(np.argmin(J_pair), J_pair.shape)
 
 
-def compute_expected_metrics_for_models(H, R, h_linear, r_linear, cost_name):
+def compute_expected_metrics_for_models(
+        H,
+        R,
+        h_linear,
+        r_linear,
+        cost_name,
+        nominal_time_discount=False,
+        discount_metrics_by_time=False,
+    ):
     pref_h = np.array([preference_cost(h) for h in H])
     pref_r = np.array([preference_cost(r) for r in R])
     p_h = softmax_from_logweights(-LAM_PREF * pref_h)
     p_r = softmax_from_logweights(-LAM_PREF * pref_r)
 
-    metric_mats = compute_pairwise_metric_matrices(H, R)
-    response_vecs = compute_response_sample_metric_vectors(h_linear, R)
+    metric_mats = compute_pairwise_metric_matrices(
+        H,
+        R,
+        nominal_time_discount=nominal_time_discount,
+        discount_metrics_by_time=discount_metrics_by_time,
+    )
+
+    D_time = pairwise_distance_time_matrix(H, R)
+
+    response_vecs = compute_response_sample_metric_vectors(
+        h_linear,
+        R,
+        nominal_time_discount=nominal_time_discount,
+        discount_metrics_by_time=discount_metrics_by_time,
+    )
     cost_mats = build_cost_matrices(metric_mats)
     C = cost_mats[cost_name]
 
     gamma_ind = np.outer(p_h, p_r)
-    q_r_sample = solve_response(p_r, response_cost_vector_from_name(cost_name, h_linear, R), LAM_RESP_SAMPLE)
+    q_r_sample = solve_response(
+        p_r,
+        response_cost_vector_from_name(
+            cost_name,
+            h_linear,
+            R,
+            nominal_time_discount=nominal_time_discount,
+        ),
+        LAM_RESP_SAMPLE,
+    )
     q_r_marg = solve_response(p_r, np.sum(p_h[:, None] * C, axis=0), LAM_RESP_MARG)
     gamma_joint = solve_joint_kl(gamma_ind, C, LAM_JOINT)
     gamma_marg = solve_marginal_kl(p_h, p_r, C)
 
+    gamma_resp_sample = np.zeros_like(gamma_ind)
+    i_star = int(np.argmax(p_h))
+    gamma_resp_sample[i_star, :] = q_r_sample
+
+    gamma_resp_marg = p_h[:, None] * q_r_marg[None, :]
+
+    coupling_gain = {
+        "ind": kl_divergence(gamma_ind, gamma_ind),
+        "resp_sample": kl_divergence(gamma_resp_sample, gamma_ind),
+        "resp_marg": kl_divergence(gamma_resp_marg, gamma_ind),
+        "joint": kl_divergence(gamma_joint, gamma_ind),
+        "marg": kl_divergence(gamma_marg, gamma_ind),
+    }
+
     E = {model: {} for model in ["ind", "resp_sample", "resp_marg", "joint", "marg"]}
+    # for metric in METRIC_ORDER:
+    #     if metric == "COUPLING_GAIN":
+    #         E["ind"][metric] = coupling_gain["ind"]
+    #         E["resp_sample"][metric] = coupling_gain["resp_sample"]
+    #         E["resp_marg"][metric] = coupling_gain["resp_marg"]
+    #         E["joint"][metric] = coupling_gain["joint"]
+    #         E["marg"][metric] = coupling_gain["marg"]
+    #     else:
+    #         E["ind"][metric] = expected_joint(gamma_ind, metric_mats[metric])
+    #         E["resp_sample"][metric] = expected_robot(q_r_sample, response_vecs[metric])
+    #         E["resp_marg"][metric] = float(np.sum(gamma_resp_marg * metric_mats[metric]))
+    #         E["joint"][metric] = expected_joint(gamma_joint, metric_mats[metric])
+    #         E["marg"][metric] = expected_joint(gamma_marg, metric_mats[metric])
+
+
+    time_metrics = {
+        "ind": compute_time_indexed_metrics(gamma_ind, D_time),
+        "resp_sample": compute_time_indexed_metrics(gamma_resp_sample, D_time),
+        "resp_marg": compute_time_indexed_metrics(gamma_resp_marg, D_time),
+        "joint": compute_time_indexed_metrics(gamma_joint, D_time),
+        "marg": compute_time_indexed_metrics(gamma_marg, D_time),
+    }
+
     for metric in METRIC_ORDER:
-        E["ind"][metric] = expected_joint(gamma_ind, metric_mats[metric])
-        E["resp_sample"][metric] = expected_robot(q_r_sample, response_vecs[metric])
-        E["resp_marg"][metric] = float(np.sum((p_h[:, None] * q_r_marg[None, :]) * metric_mats[metric]))
-        E["joint"][metric] = expected_joint(gamma_joint, metric_mats[metric])
-        E["marg"][metric] = expected_joint(gamma_marg, metric_mats[metric])
+        if metric == "COUPLING_GAIN":
+            E["ind"][metric] = coupling_gain["ind"]
+            E["resp_sample"][metric] = coupling_gain["resp_sample"]
+            E["resp_marg"][metric] = coupling_gain["resp_marg"]
+            E["joint"][metric] = coupling_gain["joint"]
+            E["marg"][metric] = coupling_gain["marg"]
+        elif metric in time_metrics["ind"]:
+            E["ind"][metric] = time_metrics["ind"][metric]
+            E["resp_sample"][metric] = time_metrics["resp_sample"][metric]
+            E["resp_marg"][metric] = time_metrics["resp_marg"][metric]
+            E["joint"][metric] = time_metrics["joint"][metric]
+            E["marg"][metric] = time_metrics["marg"][metric]
+        else:
+            E["ind"][metric] = expected_joint(gamma_ind, metric_mats[metric])
+            E["resp_sample"][metric] = expected_robot(q_r_sample, response_vecs[metric])
+            E["resp_marg"][metric] = float(np.sum(gamma_resp_marg * metric_mats[metric]))
+            E["joint"][metric] = expected_joint(gamma_joint, metric_mats[metric])
+            E["marg"][metric] = expected_joint(gamma_marg, metric_mats[metric])
+
+
 
     i_gamma, j_gamma = np.unravel_index(np.argmax(gamma_marg), gamma_marg.shape)
     i_pair, j_pair = solve_pointwise_pair(H, R, h_linear, r_linear, C)
 
-    pair_metric_values = {metric: float(metric_mats[metric][i_pair, j_pair]) for metric in METRIC_ORDER}
-    gamma_metric_values = {metric: float(metric_mats[metric][i_gamma, j_gamma]) for metric in METRIC_ORDER}
-    pair_minus_gamma = {metric: pair_metric_values[metric] - gamma_metric_values[metric] for metric in METRIC_ORDER}
+    pair_metric_values = {}
+    gamma_metric_values = {}
+    pair_minus_gamma = {}
+
+    for metric in METRIC_ORDER:
+        # if metric == "COUPLING_GAIN":
+        if metric in ["COUPLING_GAIN", "MIN_EXPECTED_DISTANCE", "MEAN_EXPECTED_DISTANCE", "MAX_COLLISION_RISK"]:
+            pair_metric_values[metric] = np.nan
+            gamma_metric_values[metric] = np.nan
+            pair_minus_gamma[metric] = np.nan
+        else:
+            pair_metric_values[metric] = float(metric_mats[metric][i_pair, j_pair])
+            gamma_metric_values[metric] = float(metric_mats[metric][i_gamma, j_gamma])
+            pair_minus_gamma[metric] = pair_metric_values[metric] - gamma_metric_values[metric]
+
 
     return {
         "p_h": p_h, "p_r": p_r,
@@ -544,9 +777,22 @@ def make_row(snapshot_dist, cost_name, sol):
     return row
 
 
-def compute_row_only(snapshot_dist, cost_name):
+def compute_row_only(
+        snapshot_dist,
+        cost_name,
+        nominal_time_discount=False,
+        discount_metrics_by_time=False,
+    ):
     H, R, h_linear, r_linear, _, _ = build_snapshot(snapshot_dist)
-    sol = compute_expected_metrics_for_models(H, R, h_linear, r_linear, cost_name)
+    sol = compute_expected_metrics_for_models(
+        H,
+        R,
+        h_linear,
+        r_linear,
+        cost_name,
+        nominal_time_discount=nominal_time_discount,
+        discount_metrics_by_time=discount_metrics_by_time,
+    )
     return make_row(snapshot_dist, cost_name, sol)
 
 
@@ -586,9 +832,9 @@ def find_no_benefit_cutoff(xs, panel_series, eps=NO_BENEFIT_EPS):
 
     return None
 
-def save_metric_page(rows_for_cost, cost_name):
+def save_metric_page(rows_for_cost, cost_name, rel_threshold=0.05, show_bands=True):
     xs = [row["distance_m"] for row in rows_for_cost]
-    fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
+    fig, axes = plt.subplots(6, 2, figsize=(15.0, 16.0), sharex=False)
     axes = axes.ravel()
     model_keys = [
         ("ind", "Perf diff: NTC_marg - TC: p_h p_r"),
@@ -619,24 +865,30 @@ def save_metric_page(rows_for_cost, cost_name):
             else:
                 ax.plot(xs, ys, marker="o", linestyle="-", linewidth=2.0, label=label)
         ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
-        # ax.axhspan(-0.05, 0.05, color="gray", alpha=0.15)
-        ax.axhspan(
-            -NO_BENEFIT_EPS,
-            NO_BENEFIT_EPS,
-            color="gray",
-            alpha=0.15,
-            label="negligible benefit band"
-        )
-        s_cutoff = find_no_benefit_cutoff(xs, panel_series)
+        
+        if show_bands:
+            thresholds = no_benefit_thresholds(rows_for_cost, metric, rel_threshold)
 
-        if s_cutoff is not None:
-            ax.axvline(
-                s_cutoff,
-                color="purple",
-                linewidth=2.0,
-                linestyle=":",
-                label=f"s*={s_cutoff:g}"
+            ax.fill_between(
+                xs,
+                -thresholds,
+                thresholds,
+                color="gray",
+                alpha=0.15,
+                label="within 5% of NTC KL(marginals)",
             )
+
+            s_cutoff = find_no_benefit_cutoff_relative(xs, panel_series, thresholds)
+
+            if s_cutoff is not None:
+                ax.axvline(
+                    s_cutoff,
+                    color="purple",
+                    linewidth=2.0,
+                    linestyle=":",
+                    label=f"end of coordination benefit: s={s_cutoff:g}",
+                )
+
         ax.set_title(f"Collaboration benefit: {METRIC_LABELS[metric]}")
         ax.set_ylabel(METRIC_YLABELS[metric])
         ax.set_xlabel("Start separation s (m)")
@@ -652,7 +904,7 @@ def save_metric_page(rows_for_cost, cost_name):
 
 def save_expected_metric_page(rows_for_cost, cost_name):
     xs = [row["distance_m"] for row in rows_for_cost]
-    fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
+    fig, axes = plt.subplots(6, 2, figsize=(15.0, 16.0), sharex=False)
     axes = axes.ravel()
     model_keys = [("ind", "TC: p_h p_r"), ("resp_sample", "TC: q_r*delta(h-h*)"), ("resp_marg", "TC: q_r*p_h"), ("joint", "NTC: KL(joint)"), ("marg", "NTC: KL(marginals)")]
     for ax, metric in zip(axes, METRIC_ORDER):
@@ -677,7 +929,7 @@ def save_expected_metric_page(rows_for_cost, cost_name):
 def save_expected_metric_page(rows_for_cost, cost_name):
     xs = [row["distance_m"] for row in rows_for_cost]
 
-    fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
+    fig, axes = plt.subplots(6, 2, figsize=(15.0, 16.0), sharex=False)
     axes = axes.ravel()
 
     model_keys = [
@@ -744,7 +996,209 @@ def save_expected_metric_page(rows_for_cost, cost_name):
     plt.close(fig)
 
 
+def save_individual_expected_metric_plot(
+        rows_for_cost,
+        cost_name,
+        metric,
+        models_to_plot,
+    ):
+    xs = [row["distance_m"] for row in rows_for_cost]
 
+    model_labels = {
+        "ind": "TC: p_h p_r",
+        "resp_sample": "TC: q_r*delta(h-h*)",
+        "resp_marg": "TC: q_r*p_h",
+        "joint": "NTC: KL(joint)",
+        "marg": "NTC: KL(marginals)",
+    }
+
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+
+    for model_key in models_to_plot:
+        ys = [row[f"E_{model_key}_{metric}"] for row in rows_for_cost]
+
+        if model_key == "marg":
+            ax.plot(xs, ys, linewidth=3.0, label=model_labels[model_key])
+        else:
+            ax.plot(xs, ys, linewidth=2.0, label=model_labels[model_key])
+
+    ax.set_title(f"Expected {METRIC_LABELS[metric]} values")
+    ax.set_ylabel(f"E[{METRIC_LABELS[metric]}]")
+    ax.set_xlabel("Start separation s (m)")
+    ax.set_xticks(xs)
+    ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="best", fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(
+        OUTDIR / f"expected_metric_{metric}_c_{COST_LABELS[cost_name]}.png",
+        dpi=220,
+        bbox_inches="tight",
+    )
+    plt.close(fig)
+
+
+def best_tc_value_for_metric(row, metric):
+    tc_models = ["ind", "resp_sample", "resp_marg"]
+    vals = [row[f"E_{model}_{metric}"] for model in tc_models]
+
+    if METRIC_BETTER[metric] == "larger":
+        return max(vals)
+    return min(vals)
+
+
+def no_benefit_thresholds(rows_for_cost, metric, rel_threshold):
+    thresholds = []
+
+    for row in rows_for_cost:
+        ntc = row[f"E_marg_{metric}"]
+        thresholds.append(float(rel_threshold) * abs(float(ntc)))
+
+    return np.array(thresholds, dtype=float)
+
+
+def find_no_benefit_cutoff_relative(xs, panel_series, thresholds):
+    arr = np.vstack(panel_series)
+    inside = np.all(np.abs(arr) <= thresholds[None, :], axis=0)
+
+    for k in range(len(xs)):
+        if np.all(inside[k:]):
+            return xs[k]
+
+    return None
+
+
+
+
+def save_individual_delta_metric_plot(
+        rows_for_cost,
+        cost_name,
+        metric,
+        models_to_plot,
+        rel_threshold,
+        show_bands,
+    ):
+    xs = [row["distance_m"] for row in rows_for_cost]
+
+    model_labels = {
+        "ind": "Perf diff: NTC_marg - TC: p_h p_r",
+        "resp_sample": "Perf diff: NTC_marg - TC: q_r*delta(h-h*)",
+        "resp_marg": "Perf diff: NTC_marg - TC: q_r*p_h",
+        "joint": "Perf diff: NTC_marg - NTC: KL(joint)",
+        "marg": "NTC: KL(marginals)",
+    }
+
+    delta_models = [m for m in models_to_plot if m != "marg"]
+
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+
+    panel_series = []
+
+    for model_key in delta_models:
+        ys = np.array(
+            [row[f"DeltaE_{model_key}_{metric}"] for row in rows_for_cost],
+            dtype=float,
+        )
+        panel_series.append(ys)
+
+        ax.plot(
+            xs,
+            ys,
+            marker="o",
+            linestyle="-",
+            linewidth=2.0,
+            label=model_labels[model_key],
+        )
+
+    ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
+
+    if show_bands:
+        thresholds = no_benefit_thresholds(rows_for_cost, metric, rel_threshold)
+
+        ax.fill_between(
+            xs,
+            -thresholds,
+            thresholds,
+            color="gray",
+            alpha=0.15,
+            label="within 5% of NTC KL(marginals)",
+        )
+
+        s_cutoff = find_no_benefit_cutoff_relative(xs, panel_series, thresholds)
+
+        if s_cutoff is not None:
+            ax.axvline(
+                s_cutoff,
+                color="purple",
+                linewidth=2.0,
+                linestyle=":",
+                label=f"end of coordination benefit: s={s_cutoff:g}",
+            )
+
+    # thresholds = no_benefit_thresholds(rows_for_cost, metric, rel_threshold)
+
+    # ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
+    # ax.fill_between(
+    #     xs,
+    #     -thresholds,
+    #     thresholds,
+    #     color="gray",
+    #     alpha=0.15,
+    #     label="within 5% of NTC KL(marginals)",
+    # )
+
+    # s_cutoff = find_no_benefit_cutoff_relative(xs, panel_series, thresholds)
+
+    # if s_cutoff is not None:
+    #     ax.axvline(
+    #         s_cutoff,
+    #         color="purple",
+    #         linewidth=2.0,
+    #         linestyle=":",
+    #         label=f"end of coordination benefit: s={s_cutoff:g}",
+    #     )
+
+    ax.set_title(f"Collaboration benefit: {METRIC_LABELS[metric]}")
+    ax.set_ylabel(METRIC_YLABELS[metric])
+    ax.set_xlabel("Start separation s (m)")
+    ax.set_xticks(xs)
+    ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="best", fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(
+        OUTDIR / f"metric_{metric}_c_{COST_LABELS[cost_name]}.png",
+        dpi=220,
+        bbox_inches="tight",
+    )
+    plt.close(fig)
+
+
+def save_individual_metric_plots(
+        rows_for_cost,
+        cost_name,
+        metrics_to_plot,
+        models_to_plot,
+        rel_threshold,
+        show_bands,
+    ):
+    for metric in metrics_to_plot:
+        save_individual_expected_metric_plot(
+            rows_for_cost,
+            cost_name,
+            metric,
+            models_to_plot,
+        )
+        save_individual_delta_metric_plot(
+            rows_for_cost,
+            cost_name,
+            metric,
+            models_to_plot,
+            rel_threshold,
+            show_bands,
+        )
 
 
 def save_gamma_cost_comparison_page(rows_by_cost, costs_to_compare):
@@ -762,7 +1216,7 @@ def save_gamma_cost_comparison_page(rows_by_cost, costs_to_compare):
     first_cost = costs_to_compare[0]
     xs = [row["distance_m"] for row in rows_by_cost[first_cost]]
 
-    fig, axes = plt.subplots(4, 2, figsize=(16.0, 16.0), sharex=False)
+    fig, axes = plt.subplots(6, 2, figsize=(16.0, 16.0), sharex=False)
     axes = axes.ravel()
 
     for ax, metric in zip(axes, METRIC_ORDER):
@@ -799,12 +1253,55 @@ def save_gamma_cost_comparison_page(rows_by_cost, costs_to_compare):
     plt.close(fig)
 
 
+def save_coupling_gain_comparison_page(rows_by_cost, costs_to_compare):
+    """
+    Plot coupling gain for each gamma*_c model across s.
 
+    coupling_gain = KL(gamma*_c || p_h p_r)
+
+    Each curve = one cost-indexed NTC KL(marginals) model
+    """
+    if not costs_to_compare:
+        return
+
+    first_cost = costs_to_compare[0]
+    xs = [row["distance_m"] for row in rows_by_cost[first_cost]]
+
+    fig, ax = plt.subplots(figsize=(10.0, 6.0))
+
+    for cost_name in costs_to_compare:
+        rows_for_cost = rows_by_cost[cost_name]
+        ys = [row["E_marg_COUPLING_GAIN"] for row in rows_for_cost]
+
+        ax.plot(
+            xs,
+            ys,
+            linewidth=2.0,
+            linestyle="-",
+            label=f"gamma*_{COST_LABELS[cost_name]}",
+        )
+
+    ax.set_title("Coupling gain: KL(gamma*_c || p_h p_r)")
+    ax.set_ylabel("coupling gain (KL)")
+    ax.set_xlabel("Start separation s (m)")
+    ax.set_xticks(xs)
+    ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
+    ax.grid(True, alpha=0.25)
+
+    ax.legend(loc="best", fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(
+        OUTDIR / "coupling_gain_comparison_page.png",
+        dpi=180,
+        bbox_inches="tight",
+    )
+    plt.close(fig)
 
 
 def save_pair_vs_gamma_page(rows_for_cost, cost_name):
     xs = [row["distance_m"] for row in rows_for_cost]
-    fig, axes = plt.subplots(4, 2, figsize=(15.0, 16.0), sharex=False)
+    fig, axes = plt.subplots(6, 2, figsize=(15.0, 16.0), sharex=False)
     axes = axes.ravel()
     for ax, metric in zip(axes, METRIC_ORDER):
         ys = [row[f"pair_minus_gamma_{metric}"] for row in rows_for_cost]
@@ -985,10 +1482,20 @@ def save_evolution_movie(rows_by_cost, cost_name, metric_subset, suffix, movie_d
 
 
 
-def compute_cost_block(cost_name, field_distances):
+def compute_cost_block(
+        cost_name,
+        field_distances,
+        nominal_time_discount=False,
+        discount_metrics_by_time=False,
+    ):
     rows_for_cost = []
     for dist in field_distances:
-        row = compute_row_only(dist, cost_name)
+        row = compute_row_only(
+            dist,
+            cost_name,
+            nominal_time_discount=nominal_time_discount,
+            discount_metrics_by_time=discount_metrics_by_time,
+        )
         rows_for_cost.append(row)
     return cost_name, rows_for_cost
 
@@ -1001,6 +1508,8 @@ def main():
     movie_costs = [c for c in config["movie_costs"] if c in costs_to_run]
     field_distances = build_distance_grid(config)
     movie_distances = field_distances[::-1]
+    nominal_time_discount = bool(config.get("nominal_time_discount", False))
+    discount_metrics_by_time = bool(config.get("discount_metrics_by_time", False))
 
     print("Config:")
     print(f"  costs_to_run: {[COST_LABELS[c] for c in costs_to_run]}")
@@ -1008,6 +1517,8 @@ def main():
     print(f"  make_snapshot_pngs: {config['make_snapshot_pngs']}")
     print(f"  make_movies: {config['make_movies']}")
     print(f"  s grid: {field_distances[0]:g} to {field_distances[-1]:g} by {config['s_step']:g}")
+    print(f"  nominal_time_discount: {nominal_time_discount}")
+    print(f"  discount_metrics_by_time: {discount_metrics_by_time}")
 
     rows = []
     rows_by_cost = {cost_name: [] for cost_name in costs_to_run}
@@ -1021,7 +1532,13 @@ def main():
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(compute_cost_block, cost_name, field_distances): cost_name
+                executor.submit(
+                    compute_cost_block,
+                    cost_name,
+                    field_distances,
+                    nominal_time_discount,
+                    discount_metrics_by_time,
+                ): cost_name
                 for cost_name in costs_to_run
             }
 
@@ -1034,7 +1551,12 @@ def main():
     else:
         for cost_name in costs_to_run:
             print(f"Computing cost: {COST_LABELS[cost_name]}")
-            completed_cost_name, rows_for_cost = compute_cost_block(cost_name, field_distances)
+            completed_cost_name, rows_for_cost = compute_cost_block(
+                cost_name,
+                field_distances,
+                nominal_time_discount,
+                discount_metrics_by_time,
+            )
             rows_by_cost[completed_cost_name] = rows_for_cost
             rows.extend(rows_for_cost)
 
@@ -1053,16 +1575,36 @@ def main():
 
             if config["make_metric_pages"]:
                 print(f"Writing DeltaE metric page for cost: {COST_LABELS[cost_name]}")
-                save_metric_page(rows_by_cost[cost_name], cost_name)
+                save_metric_page(
+                    rows_by_cost[cost_name],
+                    cost_name,
+                    float(config.get("no_benefit_rel_threshold", 0.05)),
+                    config.get("show_bands", True),
+                )
 
             if config["make_pointwise_vs_ot_pages"]:
                 print(f"Writing pointwise-vs-OT page for cost: {COST_LABELS[cost_name]}")
                 save_pair_vs_gamma_page(rows_by_cost[cost_name], cost_name)
 
+            if config.get("make_individual_metric_plots", False):
+                print(f"Writing individual metric plots for cost: {COST_LABELS[cost_name]}")
+                save_individual_metric_plots(
+                    rows_by_cost[cost_name],
+                    cost_name,
+                    config["metrics_to_plot"],
+                    config["models_to_plot"],
+                    float(config.get("no_benefit_rel_threshold", 0.05)),
+                    config.get("show_bands", True),
+                )
+
 
     if config.get("make_gamma_cost_comparison_pages", False):
         print("Writing gamma cost-comparison expected metric page")
         save_gamma_cost_comparison_page(rows_by_cost, costs_to_run)
+
+    if config.get("make_coupling_gain_comparison_pages", False):
+        print("Writing coupling gain comparison page")
+        save_coupling_gain_comparison_page(rows_by_cost, costs_to_run)
 
     save_metrics_csv(rows)
 

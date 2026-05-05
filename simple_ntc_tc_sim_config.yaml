@@ -16,57 +16,84 @@
 #
 # Available metrics:
 #   NOMINAL_COST
+#   COUPLING_GAIN
 #   NUM_COLLISIONS
 #   MDP
 #   ASD
 #   IMBALANCE
 #   PSC
 #   PATH_EFF
-#   CONTROL_EFFOR
 
 
-s_min: 0.5
+no_benefit_rel_threshold: 0.5
+
+s_min: 1.0
 s_max: 10.0
 s_step: 0.5
 
-make_metric_pages: false
-make_expected_metric_pages: false
+show_bands: false
+# Nominal cost weighting
+nominal_time_discount: true   # if true: use 1/t, if false: uniform weighting
+discount_metrics_by_time: false
+
+make_individual_metric_plots: true
+make_metric_pages: true
+make_expected_metric_pages: true
+make_gamma_cost_comparison_pages: false
+make_coupling_gain_comparison_pages: false
 make_pointwise_vs_ot_pages: false
 make_snapshot_pngs: false
 make_movies: false
-make_gamma_cost_comparison_pages: true
 
 costs_to_run:
   - C_NOMINAL
-  - C_NUM_COLLISIONS
-  - C_MDP
-  - C_ASD
-  - C_IMBALANCE
-  - C_PSC
-  - C_CONTROL_EFFORT
-  - C_COMBINED
+  # - C_NUM_COLLISIONS
+  # - C_MDP
+  # - C_ASD
+  # - C_IMBALANCE
+  # - C_PSC
+  # - C_COMBINED
+
+metrics_to_run:
+  - NUM_COLLISIONS
+  - MDP
+  - ASD
+  - MIN_EXPECTED_DISTANCE
+  - MEAN_EXPECTED_DISTANCE
+  - MAX_COLLISION_RISK
+
+metrics_to_plot:
+  - NOMINAL_COST
+  # - MDP
+  # - ASD
+
+models_to_plot:
+  - ind
+  - resp_sample
+  - resp_marg
+  # - marg
 
 movie_costs:
   - C_NOMINAL
-  - C_NUM_COLLISIONS
-  - C_MDP
-  - C_ASD
-  - C_IMBALANCE
-  - C_PSC
-  - C_CONTROL_EFFORT
-  - C_COMBINED
+  # - C_NUM_COLLISIONS
+  # - C_MDP
+  # - C_ASD
+  # - C_IMBALANCE
+  # - C_PSC
+  # - C_COMBINED
 
 movie_metric_sets:
   metrics_safety:
     - NOMINAL_COST
+    - COUPLING_GAIN
     - NUM_COLLISIONS
-    - ASD
     - MDP
   metrics_coord_effort:
+    - ASD
     - IMBALANCE
     - PSC
     - PATH_EFF
-    - CONTROL_EFFORT
+
 
 snapshot_distances:
   - 10.0
@@ -75,7 +102,6 @@ snapshot_distances:
   - 3.5
   - 2.5
   - 1.5
-  - 0.5
 
 parallel: true
 max_workers: 16
