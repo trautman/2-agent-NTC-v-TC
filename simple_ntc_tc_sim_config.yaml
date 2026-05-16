@@ -43,7 +43,7 @@ make_coupling_gain_comparison_pages: false
 make_pointwise_vs_ot_pages: false
 make_snapshot_pngs: true
 make_marginal_pngs: true
-make_movies: false
+make_movies: true
 
 costs_to_run:
   - C_NOMINAL
