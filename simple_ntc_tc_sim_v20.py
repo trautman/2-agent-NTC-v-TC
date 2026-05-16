@@ -2,7 +2,7 @@ import csv
 import shutil
 import os
 from pathlib import Path
-import yaml
+# import yaml
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
@@ -35,6 +35,21 @@ from constants import (
     DEFAULT_CONFIG_PATH,
 )
 
+from config import (
+    load_config,
+    validate_config,
+    build_distance_grid,
+)
+
+from trajectories import (
+    make_centerline_trajectory,
+    build_structured_library,
+    preference_cost,
+    trajectory_deviation_costs,
+    build_snapshot,
+)
+
+# CONSTANTS.PY
 # OUTDIR = Path("ntc_tc_sim_outputs_v20")
 # OUTDIR.mkdir(exist_ok=True)
 
@@ -55,7 +70,6 @@ from constants import (
 # ALPHA_H = LAM_H
 # ALPHA_R = LAM_R
 
-
 # METRIC_ORDER = [
 #     "NOMINAL_COST",
 #     "COUPLING_GAIN",
@@ -69,7 +83,6 @@ from constants import (
 #     "PSC",
 #     "PATH_EFF",
 # ]
-
 
 # METRIC_LABELS = {
 #     "NOMINAL_COST": "cost",
@@ -98,7 +111,6 @@ from constants import (
 #     "MEAN_EXPECTED_DISTANCE": "Delta mean_expected_distance (m)",
 #     "MAX_COLLISION_RISK": "Delta max_collision_risk",
 # }
-
 
 # METRIC_BETTER = {
 #     "NOMINAL_COST": "smaller",
@@ -135,80 +147,160 @@ from constants import (
 #     # "C_CONTROL_EFFORT": "c_control_effort",
 #     "C_COMBINED": "c_combined",
 # }
-
 # DEFAULT_CONFIG_PATH = Path("simple_ntc_tc_sim_config.yaml")
 
 
-def load_config(path=DEFAULT_CONFIG_PATH):
-    default_config = {
-        "costs_to_run": ["C_NOMINAL"],
-        "make_individual_metric_plots": False,
-        "make_metric_pages": True,
-        "make_pointwise_vs_ot_pages": True,
-        "make_snapshot_pngs": False,
-        "make_movies": True,
-        "movie_costs": ["C_NOMINAL"],
-        "movie_metric_sets": {
-            "metrics_safety": ["NOMINAL_COST", "NUM_COLLISIONS", "ASD", "MDP"],
-            "metrics_coord_effort": ["IMBALANCE", "PSC", "PATH_EFF", "CONTROL_EFFORT"],
-        },
-        "snapshot_distances": [10.0, 7.5, 5.0, 3.5, 2.5, 1.5, 1.0],
-        "s_min": 1.0,
-        "s_max": 10.0,
-        "s_step": 0.5,
-        "make_expected_metric_pages": True,
-        "make_gamma_cost_comparison_pages": False,
-        "make_coupling_gain_comparison_pages": False,
-        "parallel": False,
-        "max_workers": None,
-        "nominal_time_discount": False,
-        "discount_metrics_by_time": False,
-                "metrics_to_plot": METRIC_ORDER.copy(),
-        "models_to_plot": ["ind", "resp_sample", "resp_marg", "marg"],
-        "no_benefit_rel_threshold": 0.05,
-        "show_bands": True,
-        "make_marginal_pngs": True,
-    }
-
-    if not path.exists():
-        return default_config
-
-    with open(path, "r") as f:
-        loaded = yaml.safe_load(f) or {}
-
-    config = default_config.copy()
-    config.update(loaded)
-    return config
 
 
-def validate_config(config):
-    for cost_name in config["costs_to_run"]:
-        if cost_name not in COST_ORDER:
-            raise ValueError(f"Unknown cost in costs_to_run: {cost_name}")
-    for cost_name in config["movie_costs"]:
-        if cost_name not in COST_ORDER:
-            raise ValueError(f"Unknown cost in movie_costs: {cost_name}")
-    for _, metrics in config["movie_metric_sets"].items():
-        for metric in metrics:
-            if metric not in METRIC_ORDER:
-                raise ValueError(f"Unknown metric in movie_metric_sets: {metric}")
-    for metric_name in config["metrics_to_plot"]:
-        if metric_name not in METRIC_ORDER:
-            raise ValueError(f"Unknown metric in metrics_to_plot: {metric_name}")
-    if config["s_step"] <= 0:
-        raise ValueError("s_step must be positive")
-    if config["s_max"] < config["s_min"]:
-        raise ValueError("s_max must be >= s_min")
+
+# CONFIG.PY
+# def load_config(path=DEFAULT_CONFIG_PATH):
+#     default_config = {
+#         "costs_to_run": ["C_NOMINAL"],
+#         "make_individual_metric_plots": False,
+#         "make_metric_pages": True,
+#         "make_pointwise_vs_ot_pages": True,
+#         "make_snapshot_pngs": False,
+#         "make_movies": True,
+#         "movie_costs": ["C_NOMINAL"],
+#         "movie_metric_sets": {
+#             "metrics_safety": ["NOMINAL_COST", "NUM_COLLISIONS", "ASD", "MDP"],
+#             "metrics_coord_effort": ["IMBALANCE", "PSC", "PATH_EFF", "CONTROL_EFFORT"],
+#         },
+#         "snapshot_distances": [10.0, 7.5, 5.0, 3.5, 2.5, 1.5, 1.0],
+#         "s_min": 1.0,
+#         "s_max": 10.0,
+#         "s_step": 0.5,
+#         "make_expected_metric_pages": True,
+#         "make_gamma_cost_comparison_pages": False,
+#         "make_coupling_gain_comparison_pages": False,
+#         "parallel": False,
+#         "max_workers": None,
+#         "nominal_time_discount": False,
+#         "discount_metrics_by_time": False,
+#                 "metrics_to_plot": METRIC_ORDER.copy(),
+#         "models_to_plot": ["ind", "resp_sample", "resp_marg", "marg"],
+#         "no_benefit_rel_threshold": 0.05,
+#         "show_bands": True,
+#         "make_marginal_pngs": True,
+#     }
+
+#     if not path.exists():
+#         return default_config
+
+#     with open(path, "r") as f:
+#         loaded = yaml.safe_load(f) or {}
+
+#     config = default_config.copy()
+#     config.update(loaded)
+#     return config
+
+# def validate_config(config):
+#     for cost_name in config["costs_to_run"]:
+#         if cost_name not in COST_ORDER:
+#             raise ValueError(f"Unknown cost in costs_to_run: {cost_name}")
+#     for cost_name in config["movie_costs"]:
+#         if cost_name not in COST_ORDER:
+#             raise ValueError(f"Unknown cost in movie_costs: {cost_name}")
+#     for _, metrics in config["movie_metric_sets"].items():
+#         for metric in metrics:
+#             if metric not in METRIC_ORDER:
+#                 raise ValueError(f"Unknown metric in movie_metric_sets: {metric}")
+#     for metric_name in config["metrics_to_plot"]:
+#         if metric_name not in METRIC_ORDER:
+#             raise ValueError(f"Unknown metric in metrics_to_plot: {metric_name}")
+#     if config["s_step"] <= 0:
+#         raise ValueError("s_step must be positive")
+#     if config["s_max"] < config["s_min"]:
+#         raise ValueError("s_max must be >= s_min")
+# def build_distance_grid(config):
+#     distances = np.arange(float(config["s_min"]), float(config["s_max"]) + 1e-9, float(config["s_step"]))
+#     return np.round(distances, 10)
 
 
-def build_distance_grid(config):
-    distances = np.arange(float(config["s_min"]), float(config["s_max"]) + 1e-9, float(config["s_step"]))
-    return np.round(distances, 10)
 
 
-def make_centerline_trajectory(start, goal, T):
-    return np.column_stack([np.linspace(start[0], goal[0], T), np.linspace(start[1], goal[1], T)])
 
+
+
+
+# TRAJECTORIES.PY
+# def make_centerline_trajectory(start, goal, T):
+#     return np.column_stack([np.linspace(start[0], goal[0], T), np.linspace(start[1], goal[1], T)])
+
+# def lateral_profile(tau, profile_id=0):
+#     if profile_id == 0:
+#         return np.sin(np.pi * tau)
+#     if profile_id == 1:
+#         return np.sin(np.pi * tau) ** 1.35
+#     if profile_id == 2:
+#         return 16.0 * (tau ** 2) * ((1.0 - tau) ** 2)
+#     if profile_id == 3:
+#         return (tau ** 0.8) * ((1.0 - tau) ** 1.25)
+#     raise ValueError("Unknown profile_id")
+
+# def build_structured_library(start, goal, T=31):
+#     tau = np.linspace(0.0, 1.0, T)
+#     base = make_centerline_trajectory(start, goal, T)
+#     sign_x = np.sign(goal[0] - start[0]) if abs(goal[0] - start[0]) >= abs(goal[1] - start[1]) else 1.0
+
+#     trajectories = []
+#     metadata = []
+
+#     for profile_id in [0, 1]:
+#         traj = base.copy()
+#         trajectories.append(traj)
+#         metadata.append({"side": 0, "max_dev": 0.0, "profile_id": profile_id})
+
+#     for side in [-1.0, 1.0]:
+#         for dmax in LATERAL_LEVELS[1:]:
+#             for profile_id in [0, 1, 2, 3]:
+#                 profile = lateral_profile(tau, profile_id)
+#                 lateral = side * dmax * profile / np.max(np.abs(profile))
+#                 long_basis = 16.0 * (tau ** 2) * ((1.0 - tau) ** 2)
+#                 longi = 0.004 * (profile_id - 1.5) * long_basis
+#                 traj = base.copy()
+#                 traj[:, 0] += sign_x * longi
+#                 traj[:, 1] += lateral
+#                 traj[0] = start
+#                 traj[-1] = goal
+#                 trajectories.append(traj)
+#                 metadata.append({"side": int(side), "max_dev": float(dmax), "profile_id": profile_id})
+
+#     return np.array(trajectories), metadata
+
+
+# def preference_cost(traj):
+#     y = traj[:, 1]
+#     dy = np.diff(y)
+#     ddy = np.diff(y, n=2)
+#     max_dev = np.max(np.abs(y))
+#     return (
+#         3.0 * max_dev ** 2
+#         + 12.0 * max(0.0, max_dev - 0.30) ** 2
+#         + 30.0 * max(0.0, max_dev - 0.60) ** 2
+#         + 1.4 * np.sum(dy ** 2)
+#         + 2.8 * np.sum(ddy ** 2)
+#     )
+
+# def trajectory_deviation_costs(trajs, linear_traj):
+#     return np.array([float(np.mean(np.linalg.norm(tr - linear_traj, axis=1))) for tr in trajs])
+
+# def build_snapshot(snapshot_dist, T=31):
+#     start_h = np.array([-snapshot_dist / 2.0, 0.0])
+#     goal_h = np.array([snapshot_dist / 2.0, 0.0])
+#     start_r = np.array([snapshot_dist / 2.0, 0.0])
+#     goal_r = np.array([-snapshot_dist / 2.0, 0.0])
+#     H, meta_h = build_structured_library(start_h, goal_h, T=T)
+#     R, meta_r = build_structured_library(start_r, goal_r, T=T)
+#     h_linear = make_centerline_trajectory(start_h, goal_h, T)
+#     r_linear = make_centerline_trajectory(start_r, goal_r, T)
+#     return H, R, h_linear, r_linear, meta_h, meta_r
+
+def metric_psc_pair(tr_h, tr_r):
+    mid_h = tr_h[len(tr_h) // 2, 1]
+    mid_r = tr_r[len(tr_r) // 2, 1]
+    return float(-sign_with_zero(mid_h) * sign_with_zero(mid_r))
 
 def logsumexp(arr):
     m = np.max(arr)
@@ -221,63 +313,6 @@ def softmax_from_logweights(logw):
 
 def kl_divergence(p, q, eps=1e-300):
     return float(np.sum(p * (np.log(p + eps) - np.log(q + eps))))
-
-def lateral_profile(tau, profile_id=0):
-    if profile_id == 0:
-        return np.sin(np.pi * tau)
-    if profile_id == 1:
-        return np.sin(np.pi * tau) ** 1.35
-    if profile_id == 2:
-        return 16.0 * (tau ** 2) * ((1.0 - tau) ** 2)
-    if profile_id == 3:
-        return (tau ** 0.8) * ((1.0 - tau) ** 1.25)
-    raise ValueError("Unknown profile_id")
-
-
-def build_structured_library(start, goal, T=31):
-    tau = np.linspace(0.0, 1.0, T)
-    base = make_centerline_trajectory(start, goal, T)
-    sign_x = np.sign(goal[0] - start[0]) if abs(goal[0] - start[0]) >= abs(goal[1] - start[1]) else 1.0
-
-    trajectories = []
-    metadata = []
-
-    for profile_id in [0, 1]:
-        traj = base.copy()
-        trajectories.append(traj)
-        metadata.append({"side": 0, "max_dev": 0.0, "profile_id": profile_id})
-
-    for side in [-1.0, 1.0]:
-        for dmax in LATERAL_LEVELS[1:]:
-            for profile_id in [0, 1, 2, 3]:
-                profile = lateral_profile(tau, profile_id)
-                lateral = side * dmax * profile / np.max(np.abs(profile))
-                long_basis = 16.0 * (tau ** 2) * ((1.0 - tau) ** 2)
-                longi = 0.004 * (profile_id - 1.5) * long_basis
-                traj = base.copy()
-                traj[:, 0] += sign_x * longi
-                traj[:, 1] += lateral
-                traj[0] = start
-                traj[-1] = goal
-                trajectories.append(traj)
-                metadata.append({"side": int(side), "max_dev": float(dmax), "profile_id": profile_id})
-
-    return np.array(trajectories), metadata
-
-
-def preference_cost(traj):
-    y = traj[:, 1]
-    dy = np.diff(y)
-    ddy = np.diff(y, n=2)
-    max_dev = np.max(np.abs(y))
-    return (
-        3.0 * max_dev ** 2
-        + 12.0 * max(0.0, max_dev - 0.30) ** 2
-        + 30.0 * max(0.0, max_dev - 0.60) ** 2
-        + 1.4 * np.sum(dy ** 2)
-        + 2.8 * np.sum(ddy ** 2)
-    )
-
 
 def nominal_pairwise_cost(tr_h, tr_r, nominal_time_discount=False):
     d = np.linalg.norm(tr_h - tr_r, axis=1)
@@ -364,10 +399,7 @@ def sign_with_zero(x, eps=1e-9):
     return 0.0
 
 
-# def metric_psc_pair(tr_h, tr_r):
-#     mid_h = tr_h[len(tr_h) // 2, 1]
-#     mid_r = tr_r[len(tr_r) // 2, 1]
-#     return float(-sign_with_zero(mid_h) * sign_with_zero(mid_r))
+
 def metric_psc_pair(tr_h, tr_r):
     y_h = tr_h[:, 1]
     y_r = tr_r[:, 1]
@@ -399,18 +431,6 @@ def normalize_matrix(mat, eps=1e-12):
     mn = float(np.min(mat))
     mx = float(np.max(mat))
     return (mat - mn) / (mx - mn + eps)
-
-
-def build_snapshot(snapshot_dist, T=31):
-    start_h = np.array([-snapshot_dist / 2.0, 0.0])
-    goal_h = np.array([snapshot_dist / 2.0, 0.0])
-    start_r = np.array([snapshot_dist / 2.0, 0.0])
-    goal_r = np.array([-snapshot_dist / 2.0, 0.0])
-    H, meta_h = build_structured_library(start_h, goal_h, T=T)
-    R, meta_r = build_structured_library(start_r, goal_r, T=T)
-    h_linear = make_centerline_trajectory(start_h, goal_h, T)
-    r_linear = make_centerline_trajectory(start_r, goal_r, T)
-    return H, R, h_linear, r_linear, meta_h, meta_r
 
 
 def compute_pairwise_metric_matrices(
@@ -551,10 +571,6 @@ def response_cost_vector_from_name(cost_name, h_linear, R, nominal_time_discount
         ]
         return sum(normalize_matrix(v) for v in component_costs) / len(component_costs)
     raise ValueError(f"Unknown cost_name={cost_name}")
-
-
-def trajectory_deviation_costs(trajs, linear_traj):
-    return np.array([float(np.mean(np.linalg.norm(tr - linear_traj, axis=1))) for tr in trajs])
 
 
 def solve_response(p_r, costs, lam_resp):
