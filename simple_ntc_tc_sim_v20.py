@@ -5,6 +5,8 @@ from pathlib import Path
 # import yaml
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -47,6 +49,19 @@ from trajectories import (
     preference_cost,
     trajectory_deviation_costs,
     build_snapshot,
+)
+
+from math_utils import (
+    logsumexp,
+    softmax_from_logweights,
+    kl_divergence,
+    normalize_matrix,
+)
+
+from ot_solvers import (
+    solve_response,
+    solve_joint_kl,
+    solve_marginal_kl,
 )
 
 # CONSTANTS.PY
@@ -269,7 +284,6 @@ from trajectories import (
 
 #     return np.array(trajectories), metadata
 
-
 # def preference_cost(traj):
 #     y = traj[:, 1]
 #     dy = np.diff(y)
@@ -297,22 +311,54 @@ from trajectories import (
 #     r_linear = make_centerline_trajectory(start_r, goal_r, T)
 #     return H, R, h_linear, r_linear, meta_h, meta_r
 
+
+
+
+
+# MATH_UTILS.PY
+# def logsumexp(arr):
+#     m = np.max(arr)
+#     return m + np.log(np.sum(np.exp(arr - m)))
+# def softmax_from_logweights(logw):
+#     return np.exp(logw - logsumexp(logw))
+# def kl_divergence(p, q, eps=1e-300):
+#     return float(np.sum(p * (np.log(p + eps) - np.log(q + eps))))
+# def normalize_matrix(mat, eps=1e-12):
+#     mn = float(np.min(mat))
+#     mx = float(np.max(mat))
+#     return (mat - mn) / (mx - mn + eps)
+
+
+
+
+# OT_SOLVERS.PY
+# def solve_response(p_r, costs, lam_resp):
+#     logw = np.log(p_r + 1e-300) - costs / lam_resp
+#     return softmax_from_logweights(logw)
+
+
+# def solve_joint_kl(gamma_ind, C, lam_joint):
+#     log_gamma = np.log(gamma_ind + 1e-300) - C / lam_joint
+#     return np.exp(log_gamma - logsumexp(log_gamma.ravel()))
+
+
+# def solve_marginal_kl(p_h, p_r, C, lam_h=LAM_H, lam_r=LAM_R, n_iter=5000, eta=0.04):
+#     gamma = np.outer(p_h, p_r).copy()
+#     eps = 1e-300
+#     for _ in range(n_iter):
+#         alpha = gamma.sum(axis=1)
+#         beta = gamma.sum(axis=0)
+#         grad = C + lam_h * (np.log(alpha[:, None] + eps) - np.log(p_h[:, None] + eps) + 1.0) + lam_r * (np.log(beta[None, :] + eps) - np.log(p_r[None, :] + eps) + 1.0)
+#         gamma *= np.exp(-eta * grad)
+#         gamma /= gamma.sum()
+#     return gamma
+
+
 def metric_psc_pair(tr_h, tr_r):
     mid_h = tr_h[len(tr_h) // 2, 1]
     mid_r = tr_r[len(tr_r) // 2, 1]
     return float(-sign_with_zero(mid_h) * sign_with_zero(mid_r))
 
-def logsumexp(arr):
-    m = np.max(arr)
-    return m + np.log(np.sum(np.exp(arr - m)))
-
-
-def softmax_from_logweights(logw):
-    return np.exp(logw - logsumexp(logw))
-
-
-def kl_divergence(p, q, eps=1e-300):
-    return float(np.sum(p * (np.log(p + eps) - np.log(q + eps))))
 
 def nominal_pairwise_cost(tr_h, tr_r, nominal_time_discount=False):
     d = np.linalg.norm(tr_h - tr_r, axis=1)
@@ -427,10 +473,7 @@ def metric_collision_pair(tr_h, tr_r, discount_collision_by_time=False):
     return 1.0
 
 
-def normalize_matrix(mat, eps=1e-12):
-    mn = float(np.min(mat))
-    mx = float(np.max(mat))
-    return (mat - mn) / (mx - mn + eps)
+
 
 
 def compute_pairwise_metric_matrices(
@@ -573,26 +616,7 @@ def response_cost_vector_from_name(cost_name, h_linear, R, nominal_time_discount
     raise ValueError(f"Unknown cost_name={cost_name}")
 
 
-def solve_response(p_r, costs, lam_resp):
-    logw = np.log(p_r + 1e-300) - costs / lam_resp
-    return softmax_from_logweights(logw)
 
-
-def solve_joint_kl(gamma_ind, C, lam_joint):
-    log_gamma = np.log(gamma_ind + 1e-300) - C / lam_joint
-    return np.exp(log_gamma - logsumexp(log_gamma.ravel()))
-
-
-def solve_marginal_kl(p_h, p_r, C, lam_h=LAM_H, lam_r=LAM_R, n_iter=5000, eta=0.04):
-    gamma = np.outer(p_h, p_r).copy()
-    eps = 1e-300
-    for _ in range(n_iter):
-        alpha = gamma.sum(axis=1)
-        beta = gamma.sum(axis=0)
-        grad = C + lam_h * (np.log(alpha[:, None] + eps) - np.log(p_h[:, None] + eps) + 1.0) + lam_r * (np.log(beta[None, :] + eps) - np.log(p_r[None, :] + eps) + 1.0)
-        gamma *= np.exp(-eta * grad)
-        gamma /= gamma.sum()
-    return gamma
 
 
 def expected_joint(gamma, mat):
