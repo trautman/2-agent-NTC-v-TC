@@ -32,7 +32,6 @@ s_max: 10.0
 s_step: 0.5
 
 show_bands: false
-# Nominal cost weighting
 nominal_time_discount: true   # if true: use 1/t, if false: uniform weighting
 discount_metrics_by_time: false
 
@@ -42,7 +41,8 @@ make_expected_metric_pages: true
 make_gamma_cost_comparison_pages: false
 make_coupling_gain_comparison_pages: false
 make_pointwise_vs_ot_pages: false
-make_snapshot_pngs: false
+make_snapshot_pngs: true
+make_marginal_pngs: true
 make_movies: false
 
 costs_to_run:
@@ -64,8 +64,13 @@ metrics_to_run:
 
 metrics_to_plot:
   - NOMINAL_COST
-  # - MDP
-  # - ASD
+  - NUM_COLLISIONS
+  - MDP
+  - ASD
+  - MIN_EXPECTED_DISTANCE
+  - MEAN_EXPECTED_DISTANCE
+  - MAX_COLLISION_RISK
+  - IMBALANCE
 
 models_to_plot:
   - ind

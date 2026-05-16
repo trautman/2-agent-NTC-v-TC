@@ -142,6 +142,7 @@ def load_config(path=DEFAULT_CONFIG_PATH):
         "models_to_plot": ["ind", "resp_sample", "resp_marg", "marg"],
         "no_benefit_rel_threshold": 0.05,
         "show_bands": True,
+        "make_marginal_pngs": True,
     }
 
     if not path.exists():
@@ -754,6 +755,72 @@ def add_solution_legend(ax):
         Line2D([0], [0], color="black", lw=3.0, label="pointwise optimum: argmin J_pair"),
     ]
     ax.legend(handles=handles, loc="best", fontsize=7)
+
+
+
+def plot_marginal(ax, trajectories, probs, title):
+    ax.axhline(0.0, linewidth=1, color="gray")
+
+    pmax = max(float(np.max(probs)), 1e-12)
+
+    for tr, p in sorted(zip(trajectories, probs), key=lambda x: x[1]):
+        weight = float(p / pmax)
+        ax.plot(
+            tr[:, 0],
+            tr[:, 1],
+            linewidth=0.4 + 4.0 * weight,
+            alpha=0.08 + 0.85 * weight,
+            color="green",
+        )
+
+    imax = int(np.argmax(probs))
+    ax.plot(
+        trajectories[imax][:, 0],
+        trajectories[imax][:, 1],
+        linewidth=3.5,
+        color="red",
+        label=f"MAP, p={probs[imax]:.4f}",
+    )
+
+    ax.set_title(title)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_aspect("equal")
+    ax.grid(True, alpha=0.25)
+    ax.legend(fontsize=8)
+
+
+def save_marginal_page(snapshot_dist):
+    H, R, h_linear, r_linear, _, _ = build_snapshot(snapshot_dist)
+
+    pref_h = np.array([preference_cost(h) for h in H])
+    pref_r = np.array([preference_cost(r) for r in R])
+
+    p_h = softmax_from_logweights(-LAM_PREF * pref_h)
+    p_r = softmax_from_logweights(-LAM_PREF * pref_r)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
+
+    plot_marginal(
+        axes[0],
+        H,
+        p_h,
+        f"Human marginal p_h | s={snapshot_dist:.1f}m",
+    )
+
+    plot_marginal(
+        axes[1],
+        R,
+        p_r,
+        f"Robot marginal p_r | s={snapshot_dist:.1f}m",
+    )
+
+    fig.suptitle("Marginal trajectory distributions: thickness/opacity = probability")
+    fig.tight_layout()
+
+    outpath = OUTDIR / f"marginals_{str(snapshot_dist).replace('.', '_')}m.png"
+    fig.savefig(outpath, dpi=180, bbox_inches="tight")
+    plt.close(fig)
 
 
 def make_row(snapshot_dist, cost_name, sol):
@@ -1613,6 +1680,11 @@ def main():
             print(f"Writing snapshot PNGs for cost: {COST_LABELS[cost_name]}")
             for dist in config["snapshot_distances"]:
                 save_snapshot_five_panel(float(dist), cost_name)
+
+    if config.get("make_marginal_pngs", False):
+        print("Writing marginal PNGs")
+        for dist in config["snapshot_distances"]:
+            save_marginal_page(float(dist))
 
     if config["make_movies"]:
         for cost_name in movie_costs:
