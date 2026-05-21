@@ -208,30 +208,3 @@ def compute_time_indexed_metrics(gamma, D):
         "MAX_COLLISION_RISK": float(np.max(collision_risk_t)),
     }
 
-# xnominal_pairwise_cost
-# xclosest_approach
-# xmetric_mdp
-# xmetric_mdp_discounted
-# xmetric_asd
-# xpairwise_distance_time_matrix
-# xexpected_distance_over_time
-# xcollision_risk_over_time
-# xpath_length
-# xstraight_distance
-
-
-# xmetric_path_efficiency_pair
-# xmetric_control_effort_pair
-# xmetric_imbalance_pair
-# xsign_with_zero
-# xmetric_psc_pair
-# xmetric_collision_pair
-
-# xcompute_pairwise_metric_matrices
-# xcompute_response_sample_metric_vectors
-
-
-
-# expected_joint
-# expected_robot
-# compute_time_indexed_metrics
