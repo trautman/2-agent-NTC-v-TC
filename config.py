@@ -39,6 +39,7 @@ def load_config(path=DEFAULT_CONFIG_PATH):
         "no_benefit_rel_threshold": 0.05,
         "show_bands": True,
         "make_marginal_pngs": True,
+        "ot_backend": "custom",
     }
 
     if not path.exists():
@@ -75,6 +76,9 @@ def validate_config(config):
 
     if config["s_max"] < config["s_min"]:
         raise ValueError("s_max must be >= s_min")
+
+    if config["ot_backend"] not in ["custom", "pot"]:
+        raise ValueError(f"Unknown ot_backend: {config['ot_backend']}")
 
 
 def build_distance_grid(config):

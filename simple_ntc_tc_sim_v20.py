@@ -12,6 +12,17 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.animation import FuncAnimation, PillowWriter
 
+
+
+
+
+
+
+
+
+# REFACTOR
+
+
 from constants import (
     OUTDIR,
     DEFAULT_FIELD_DISTANCES,
@@ -36,34 +47,6 @@ from constants import (
     COST_LABELS,
     DEFAULT_CONFIG_PATH,
 )
-
-from config import (
-    load_config,
-    validate_config,
-    build_distance_grid,
-)
-
-from trajectories import (
-    make_centerline_trajectory,
-    build_structured_library,
-    preference_cost,
-    trajectory_deviation_costs,
-    build_snapshot,
-)
-
-from math_utils import (
-    logsumexp,
-    softmax_from_logweights,
-    kl_divergence,
-    normalize_matrix,
-)
-
-from ot_solvers import (
-    solve_response,
-    solve_joint_kl,
-    solve_marginal_kl,
-)
-
 # CONSTANTS.PY
 # OUTDIR = Path("ntc_tc_sim_outputs_v20")
 # OUTDIR.mkdir(exist_ok=True)
@@ -166,8 +149,11 @@ from ot_solvers import (
 
 
 
-
-
+from config import (
+    load_config,
+    validate_config,
+    build_distance_grid,
+)
 # CONFIG.PY
 # def load_config(path=DEFAULT_CONFIG_PATH):
 #     default_config = {
@@ -238,7 +224,13 @@ from ot_solvers import (
 
 
 
-
+from trajectories import (
+    make_centerline_trajectory,
+    build_structured_library,
+    preference_cost,
+    trajectory_deviation_costs,
+    build_snapshot,
+)
 # TRAJECTORIES.PY
 # def make_centerline_trajectory(start, goal, T):
 #     return np.column_stack([np.linspace(start[0], goal[0], T), np.linspace(start[1], goal[1], T)])
@@ -314,7 +306,12 @@ from ot_solvers import (
 
 
 
-
+from math_utils import (
+    logsumexp,
+    softmax_from_logweights,
+    kl_divergence,
+    normalize_matrix,
+)
 # MATH_UTILS.PY
 # def logsumexp(arr):
 #     m = np.max(arr)
@@ -330,6 +327,11 @@ from ot_solvers import (
 
 
 
+from ot_solvers import (
+    solve_response,
+    solve_joint_kl,
+    solve_marginal_kl,
+)
 
 # OT_SOLVERS.PY
 # def solve_response(p_r, costs, lam_resp):
@@ -354,196 +356,242 @@ from ot_solvers import (
 #     return gamma
 
 
-def metric_psc_pair(tr_h, tr_r):
-    mid_h = tr_h[len(tr_h) // 2, 1]
-    mid_r = tr_r[len(tr_r) // 2, 1]
-    return float(-sign_with_zero(mid_h) * sign_with_zero(mid_r))
-
-
-def nominal_pairwise_cost(tr_h, tr_r, nominal_time_discount=False):
-    d = np.linalg.norm(tr_h - tr_r, axis=1)
-    t = np.arange(1, len(tr_h) + 1)
-
-    if nominal_time_discount:
-        w = 1.0 / t
-    else:
-        w = np.ones_like(t, dtype=float)
-
-    comfort_barrier = 1.0 / (1.0 + np.exp(12.0 * (d - 0.65)))
-    overlap = np.exp(-(d / 0.22) ** 2)
-    return float(np.sum(w * (3.0 * comfort_barrier + 7.0 * overlap)))
-
-
-def closest_approach(tr_h, tr_r):
-    d = np.linalg.norm(tr_h - tr_r, axis=1)
-    idx = int(np.argmin(d))
-    t = idx + 1  # 1-indexed time, consistent with nominal cost
-    return float(d[idx]), t
-
-
-def metric_mdp(tr_h, tr_r):
-    d_min, _ = closest_approach(tr_h, tr_r)
-    return d_min
-
-
-def metric_mdp_discounted(tr_h, tr_r):
-    d_min, t_min = closest_approach(tr_h, tr_r)
-    return float(d_min / float(t_min))
-
-
-def metric_asd(tr_h, tr_r):
-    return float(np.mean(np.linalg.norm(tr_h - tr_r, axis=1)))
-
-def pairwise_distance_time_matrix(H, R):
-    N, M = len(H), len(R)
-    T = H.shape[1]
-    D = np.zeros((N, M, T))
-
-    for i in range(N):
-        for j in range(M):
-            D[i, j, :] = np.linalg.norm(H[i] - R[j], axis=1)
-
-    return D
-
-
-def expected_distance_over_time(gamma, D):
-    return np.sum(gamma[:, :, None] * D, axis=(0, 1))
-
-
-def collision_risk_over_time(gamma, D, threshold=COLLISION_DISTANCE_M):
-    return np.sum(gamma[:, :, None] * (D < threshold), axis=(0, 1))
-
-def path_length(tr):
-    return float(np.sum(np.linalg.norm(np.diff(tr, axis=0), axis=1)))
-
-
-def straight_distance(tr):
-    return float(np.linalg.norm(tr[-1] - tr[0]))
-
-
-def metric_path_efficiency_pair(tr_h, tr_r):
-    eff_h = straight_distance(tr_h) / max(path_length(tr_h), 1e-12)
-    eff_r = straight_distance(tr_r) / max(path_length(tr_r), 1e-12)
-    return 0.5 * (eff_h + eff_r)
-
-
-def metric_control_effort_pair(tr_h, tr_r):
-    ah = np.diff(tr_h, n=2, axis=0)
-    ar = np.diff(tr_r, n=2, axis=0)
-    return float(np.sum(np.linalg.norm(ah, axis=1) ** 2) + np.sum(np.linalg.norm(ar, axis=1) ** 2))
-
-
-def metric_imbalance_pair(tr_h, tr_r):
-    return abs(float(np.max(np.abs(tr_h[:, 1]))) - float(np.max(np.abs(tr_r[:, 1]))))
-
-
-def sign_with_zero(x, eps=1e-9):
-    if x > eps:
-        return 1.0
-    if x < -eps:
-        return -1.0
-    return 0.0
 
 
 
-def metric_psc_pair(tr_h, tr_r):
-    y_h = tr_h[:, 1]
-    y_r = tr_r[:, 1]
+from metrics import (
+    nominal_pairwise_cost,
+    closest_approach,
+    metric_mdp,
+    metric_mdp_discounted,
+    metric_asd,
+    pairwise_distance_time_matrix,
+    expected_distance_over_time,
+    collision_risk_over_time,
+    path_length,
+    straight_distance,
+    metric_path_efficiency_pair,
+    metric_control_effort_pair,
+    metric_imbalance_pair,
+    sign_with_zero,
+    metric_psc_pair,
+    metric_collision_pair,
+    compute_pairwise_metric_matrices,
+    compute_response_sample_metric_vectors,
+    expected_joint,
+    expected_robot,
+    compute_time_indexed_metrics,
+)
+# METRICS.PY
+# def nominal_pairwise_cost(tr_h, tr_r, nominal_time_discount=False):
+#     d = np.linalg.norm(tr_h - tr_r, axis=1)
+#     t = np.arange(1, len(tr_h) + 1)
 
-    # Ignore endpoints because trajectories begin/end on the centerline.
-    y_h = y_h[1:-1]
-    y_r = y_r[1:-1]
+#     if nominal_time_discount:
+#         w = 1.0 / t
+#     else:
+#         w = np.ones_like(t, dtype=float)
 
-    psc_t = np.array([
-        -sign_with_zero(yh) * sign_with_zero(yr)
-        for yh, yr in zip(y_h, y_r)
-    ])
-
-    return float(np.mean(psc_t))
-
-def metric_collision_pair(tr_h, tr_r, discount_collision_by_time=False):
-    d_min, t_min = closest_approach(tr_h, tr_r)
-
-    if d_min > COLLISION_DISTANCE_M:
-        return 0.0
-
-    if discount_collision_by_time:
-        return 1.0 / float(t_min)
-
-    return 1.0
-
-
-
-
-
-def compute_pairwise_metric_matrices(
-        H,
-        R,
-        nominal_time_discount=False,
-        discount_metrics_by_time=False,
-    ):
-    N, M = len(H), len(R)
-    # mats = {name: np.zeros((N, M)) for name in METRIC_ORDER}
-    PAIRWISE_METRICS = [name for name in METRIC_ORDER if name != "COUPLING_GAIN"]
-    mats = {name: np.zeros((N, M)) for name in PAIRWISE_METRICS}
-    for i in range(N):
-        for j in range(M):
-            h, r = H[i], R[j]
-            mats["NOMINAL_COST"][i, j] = nominal_pairwise_cost(
-                h,
-                r,
-                nominal_time_discount=nominal_time_discount,
-            )
-            mats["NUM_COLLISIONS"][i, j] = metric_collision_pair(
-                h,
-                r,
-                discount_collision_by_time=discount_metrics_by_time,
-            )
-
-            if discount_metrics_by_time:
-                mats["MDP"][i, j] = metric_mdp_discounted(h, r)
-            else:
-                mats["MDP"][i, j] = metric_mdp(h, r)
-            mats["ASD"][i, j] = metric_asd(h, r)
-            mats["IMBALANCE"][i, j] = metric_imbalance_pair(h, r)
-            mats["PSC"][i, j] = metric_psc_pair(h, r)
-            mats["PATH_EFF"][i, j] = metric_path_efficiency_pair(h, r)
-            # mats["CONTROL_EFFORT"][i, j] = metric_control_effort_pair(h, r)
-    return mats
+#     comfort_barrier = 1.0 / (1.0 + np.exp(12.0 * (d - 0.65)))
+#     overlap = np.exp(-(d / 0.22) ** 2)
+#     return float(np.sum(w * (3.0 * comfort_barrier + 7.0 * overlap)))
 
 
-def compute_response_sample_metric_vectors(
-        h_linear,
-        R,
-        nominal_time_discount=False,
-        discount_metrics_by_time=False,
-    ):
-    # vecs = {name: np.zeros(len(R)) for name in METRIC_ORDER}
-    PAIRWISE_METRICS = [name for name in METRIC_ORDER if name != "COUPLING_GAIN"]
-    vecs = {name: np.zeros(len(R)) for name in PAIRWISE_METRICS}
-    for j, r in enumerate(R):
-        h = h_linear
-        vecs["NOMINAL_COST"][j] = nominal_pairwise_cost(
-            h,
-            r,
-            nominal_time_discount=nominal_time_discount,
-        )
-        vecs["NUM_COLLISIONS"][j] = metric_collision_pair(
-            h,
-            r,
-            discount_collision_by_time=discount_metrics_by_time,
-        )
+# def closest_approach(tr_h, tr_r):
+#     d = np.linalg.norm(tr_h - tr_r, axis=1)
+#     idx = int(np.argmin(d))
+#     t = idx + 1  # 1-indexed time, consistent with nominal cost
+#     return float(d[idx]), t
 
-        if discount_metrics_by_time:
-            vecs["MDP"][j] = metric_mdp_discounted(h, r)
-        else:
-            vecs["MDP"][j] = metric_mdp(h, r)
-        vecs["ASD"][j] = metric_asd(h, r)
-        vecs["IMBALANCE"][j] = metric_imbalance_pair(h, r)
-        vecs["PSC"][j] = metric_psc_pair(h, r)
-        vecs["PATH_EFF"][j] = metric_path_efficiency_pair(h, r)
-        # vecs["CONTROL_EFFORT"][j] = metric_control_effort_pair(h, r)
-    return vecs
+
+# def metric_mdp(tr_h, tr_r):
+#     d_min, _ = closest_approach(tr_h, tr_r)
+#     return d_min
+
+
+# def metric_mdp_discounted(tr_h, tr_r):
+#     d_min, t_min = closest_approach(tr_h, tr_r)
+#     return float(d_min / float(t_min))
+
+
+# def metric_asd(tr_h, tr_r):
+#     return float(np.mean(np.linalg.norm(tr_h - tr_r, axis=1)))
+
+# def pairwise_distance_time_matrix(H, R):
+#     N, M = len(H), len(R)
+#     T = H.shape[1]
+#     D = np.zeros((N, M, T))
+
+#     for i in range(N):
+#         for j in range(M):
+#             D[i, j, :] = np.linalg.norm(H[i] - R[j], axis=1)
+
+#     return D
+
+
+# def expected_distance_over_time(gamma, D):
+#     return np.sum(gamma[:, :, None] * D, axis=(0, 1))
+
+
+# def collision_risk_over_time(gamma, D, threshold=COLLISION_DISTANCE_M):
+#     return np.sum(gamma[:, :, None] * (D < threshold), axis=(0, 1))
+
+# def path_length(tr):
+#     return float(np.sum(np.linalg.norm(np.diff(tr, axis=0), axis=1)))
+
+
+# def straight_distance(tr):
+#     return float(np.linalg.norm(tr[-1] - tr[0]))
+
+
+# def metric_path_efficiency_pair(tr_h, tr_r):
+#     eff_h = straight_distance(tr_h) / max(path_length(tr_h), 1e-12)
+#     eff_r = straight_distance(tr_r) / max(path_length(tr_r), 1e-12)
+#     return 0.5 * (eff_h + eff_r)
+
+
+# def metric_control_effort_pair(tr_h, tr_r):
+#     ah = np.diff(tr_h, n=2, axis=0)
+#     ar = np.diff(tr_r, n=2, axis=0)
+#     return float(np.sum(np.linalg.norm(ah, axis=1) ** 2) + np.sum(np.linalg.norm(ar, axis=1) ** 2))
+
+
+# def metric_imbalance_pair(tr_h, tr_r):
+#     return abs(float(np.max(np.abs(tr_h[:, 1]))) - float(np.max(np.abs(tr_r[:, 1]))))
+
+
+# def sign_with_zero(x, eps=1e-9):
+#     if x > eps:
+#         return 1.0
+#     if x < -eps:
+#         return -1.0
+#     return 0.0
+
+
+
+# def metric_psc_pair(tr_h, tr_r):
+#     y_h = tr_h[:, 1]
+#     y_r = tr_r[:, 1]
+
+#     # Ignore endpoints because trajectories begin/end on the centerline.
+#     y_h = y_h[1:-1]
+#     y_r = y_r[1:-1]
+
+#     psc_t = np.array([
+#         -sign_with_zero(yh) * sign_with_zero(yr)
+#         for yh, yr in zip(y_h, y_r)
+#     ])
+
+#     return float(np.mean(psc_t))
+
+# def metric_collision_pair(tr_h, tr_r, discount_collision_by_time=False):
+#     d_min, t_min = closest_approach(tr_h, tr_r)
+
+#     if d_min > COLLISION_DISTANCE_M:
+#         return 0.0
+
+#     if discount_collision_by_time:
+#         return 1.0 / float(t_min)
+
+#     return 1.0
+
+
+# def compute_pairwise_metric_matrices(
+#         H,
+#         R,
+#         nominal_time_discount=False,
+#         discount_metrics_by_time=False,
+#     ):
+#     N, M = len(H), len(R)
+#     # mats = {name: np.zeros((N, M)) for name in METRIC_ORDER}
+#     PAIRWISE_METRICS = [name for name in METRIC_ORDER if name != "COUPLING_GAIN"]
+#     mats = {name: np.zeros((N, M)) for name in PAIRWISE_METRICS}
+#     for i in range(N):
+#         for j in range(M):
+#             h, r = H[i], R[j]
+#             mats["NOMINAL_COST"][i, j] = nominal_pairwise_cost(
+#                 h,
+#                 r,
+#                 nominal_time_discount=nominal_time_discount,
+#             )
+#             mats["NUM_COLLISIONS"][i, j] = metric_collision_pair(
+#                 h,
+#                 r,
+#                 discount_collision_by_time=discount_metrics_by_time,
+#             )
+
+#             if discount_metrics_by_time:
+#                 mats["MDP"][i, j] = metric_mdp_discounted(h, r)
+#             else:
+#                 mats["MDP"][i, j] = metric_mdp(h, r)
+#             mats["ASD"][i, j] = metric_asd(h, r)
+#             mats["IMBALANCE"][i, j] = metric_imbalance_pair(h, r)
+#             mats["PSC"][i, j] = metric_psc_pair(h, r)
+#             mats["PATH_EFF"][i, j] = metric_path_efficiency_pair(h, r)
+#             # mats["CONTROL_EFFORT"][i, j] = metric_control_effort_pair(h, r)
+#     return mats
+
+
+# def compute_response_sample_metric_vectors(
+#         h_linear,
+#         R,
+#         nominal_time_discount=False,
+#         discount_metrics_by_time=False,
+#     ):
+#     # vecs = {name: np.zeros(len(R)) for name in METRIC_ORDER}
+#     PAIRWISE_METRICS = [name for name in METRIC_ORDER if name != "COUPLING_GAIN"]
+#     vecs = {name: np.zeros(len(R)) for name in PAIRWISE_METRICS}
+#     for j, r in enumerate(R):
+#         h = h_linear
+#         vecs["NOMINAL_COST"][j] = nominal_pairwise_cost(
+#             h,
+#             r,
+#             nominal_time_discount=nominal_time_discount,
+#         )
+#         vecs["NUM_COLLISIONS"][j] = metric_collision_pair(
+#             h,
+#             r,
+#             discount_collision_by_time=discount_metrics_by_time,
+#         )
+
+#         if discount_metrics_by_time:
+#             vecs["MDP"][j] = metric_mdp_discounted(h, r)
+#         else:
+#             vecs["MDP"][j] = metric_mdp(h, r)
+#         vecs["ASD"][j] = metric_asd(h, r)
+#         vecs["IMBALANCE"][j] = metric_imbalance_pair(h, r)
+#         vecs["PSC"][j] = metric_psc_pair(h, r)
+#         vecs["PATH_EFF"][j] = metric_path_efficiency_pair(h, r)
+#         # vecs["CONTROL_EFFORT"][j] = metric_control_effort_pair(h, r)
+#     return vecs
+
+
+# def expected_joint(gamma, mat):
+#     return float(np.sum(gamma * mat))
+
+
+# def expected_robot(q_r, vec):
+#     return float(np.sum(q_r * vec))
+
+# def compute_time_indexed_metrics(gamma, D):
+#     expected_d_t = expected_distance_over_time(gamma, D)
+#     collision_risk_t = collision_risk_over_time(gamma, D)
+
+#     return {
+#         "MIN_EXPECTED_DISTANCE": float(np.min(expected_d_t)),
+#         "MEAN_EXPECTED_DISTANCE": float(np.mean(expected_d_t)),
+#         "MAX_COLLISION_RISK": float(np.max(collision_risk_t)),
+#     }
+
+
+
+
+
+
+
+
+
+
 
 
 def metric_to_cost_matrix(metric_name, metric_matrix):
@@ -619,22 +667,12 @@ def response_cost_vector_from_name(cost_name, h_linear, R, nominal_time_discount
 
 
 
-def expected_joint(gamma, mat):
-    return float(np.sum(gamma * mat))
 
 
-def compute_time_indexed_metrics(gamma, D):
-    expected_d_t = expected_distance_over_time(gamma, D)
-    collision_risk_t = collision_risk_over_time(gamma, D)
 
-    return {
-        "MIN_EXPECTED_DISTANCE": float(np.min(expected_d_t)),
-        "MEAN_EXPECTED_DISTANCE": float(np.mean(expected_d_t)),
-        "MAX_COLLISION_RISK": float(np.max(collision_risk_t)),
-    }
 
-def expected_robot(q_r, vec):
-    return float(np.sum(q_r * vec))
+
+
 
 
 def solve_pointwise_pair(H, R, h_linear, r_linear, cost_matrix):
@@ -653,6 +691,7 @@ def compute_expected_metrics_for_models(
         cost_name,
         nominal_time_discount=False,
         discount_metrics_by_time=False,
+        ot_backend="custom",
     ):
     pref_h = np.array([preference_cost(h) for h in H])
     pref_r = np.array([preference_cost(r) for r in R])
@@ -690,7 +729,12 @@ def compute_expected_metrics_for_models(
     )
     q_r_marg = solve_response(p_r, np.sum(p_h[:, None] * C, axis=0), LAM_RESP_MARG)
     gamma_joint = solve_joint_kl(gamma_ind, C, LAM_JOINT)
-    gamma_marg = solve_marginal_kl(p_h, p_r, C)
+    gamma_marg = solve_marginal_kl(
+        p_h,
+        p_r,
+        C,
+        backend=ot_backend,
+    )
 
     gamma_resp_sample = np.zeros_like(gamma_ind)
     i_star = int(np.argmax(p_h))
@@ -914,6 +958,7 @@ def compute_row_only(
         cost_name,
         nominal_time_discount=False,
         discount_metrics_by_time=False,
+        ot_backend="custom",
     ):
     H, R, h_linear, r_linear, _, _ = build_snapshot(snapshot_dist)
     sol = compute_expected_metrics_for_models(
@@ -924,6 +969,7 @@ def compute_row_only(
         cost_name,
         nominal_time_discount=nominal_time_discount,
         discount_metrics_by_time=discount_metrics_by_time,
+        ot_backend=ot_backend,
     )
     return make_row(snapshot_dist, cost_name, sol)
 
@@ -1619,6 +1665,7 @@ def compute_cost_block(
         field_distances,
         nominal_time_discount=False,
         discount_metrics_by_time=False,
+        ot_backend="custom",
     ):
     rows_for_cost = []
     for dist in field_distances:
@@ -1627,6 +1674,7 @@ def compute_cost_block(
             cost_name,
             nominal_time_discount=nominal_time_discount,
             discount_metrics_by_time=discount_metrics_by_time,
+            ot_backend=ot_backend,
         )
         rows_for_cost.append(row)
     return cost_name, rows_for_cost
@@ -1642,6 +1690,7 @@ def main():
     movie_distances = field_distances[::-1]
     nominal_time_discount = bool(config.get("nominal_time_discount", False))
     discount_metrics_by_time = bool(config.get("discount_metrics_by_time", False))
+    ot_backend = config.get("ot_backend", "custom")
 
     print("Config:")
     print(f"  costs_to_run: {[COST_LABELS[c] for c in costs_to_run]}")
@@ -1651,6 +1700,7 @@ def main():
     print(f"  s grid: {field_distances[0]:g} to {field_distances[-1]:g} by {config['s_step']:g}")
     print(f"  nominal_time_discount: {nominal_time_discount}")
     print(f"  discount_metrics_by_time: {discount_metrics_by_time}")
+    print(f"  ot_backend: {ot_backend}")
 
     rows = []
     rows_by_cost = {cost_name: [] for cost_name in costs_to_run}
@@ -1670,6 +1720,7 @@ def main():
                     field_distances,
                     nominal_time_discount,
                     discount_metrics_by_time,
+                    ot_backend,
                 ): cost_name
                 for cost_name in costs_to_run
             }
@@ -1688,6 +1739,7 @@ def main():
                 field_distances,
                 nominal_time_discount,
                 discount_metrics_by_time,
+                ot_backend,
             )
             rows_by_cost[completed_cost_name] = rows_for_cost
             rows.extend(rows_for_cost)
