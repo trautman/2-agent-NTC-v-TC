@@ -14,15 +14,7 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 
 
 
-
-
-
-
-
-
 # REFACTOR
-
-
 from constants import (
     OUTDIR,
     DEFAULT_FIELD_DISTANCES,
@@ -47,263 +39,20 @@ from constants import (
     COST_LABELS,
     DEFAULT_CONFIG_PATH,
 )
-# CONSTANTS.PY
-# OUTDIR = Path("ntc_tc_sim_outputs_v20")
-# OUTDIR.mkdir(exist_ok=True)
 
-# DEFAULT_FIELD_DISTANCES = np.arange(0.5, 10.0 + 0.001, 0.5)
-# DEFAULT_MOVIE_DISTANCES = DEFAULT_FIELD_DISTANCES[::-1]
-# LATERAL_LEVELS = np.array([0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.80, 1.00], dtype=float)
-
-# TOP_K = 8
-# COLLISION_DISTANCE_M = 0.6
-# NO_BENEFIT_EPS = 0.05
-
-# LAM_PREF = 1.6
-# LAM_RESP_SAMPLE = 0.25
-# LAM_RESP_MARG = 0.25
-# LAM_JOINT = 0.45
-# LAM_H = 0.30
-# LAM_R = 0.30
-# ALPHA_H = LAM_H
-# ALPHA_R = LAM_R
-
-# METRIC_ORDER = [
-#     "NOMINAL_COST",
-#     "COUPLING_GAIN",
-#     "NUM_COLLISIONS",
-#     "MDP",
-#     "ASD",
-#     "MIN_EXPECTED_DISTANCE",
-#     "MEAN_EXPECTED_DISTANCE",
-#     "MAX_COLLISION_RISK",
-#     "IMBALANCE",
-#     "PSC",
-#     "PATH_EFF",
-# ]
-
-# METRIC_LABELS = {
-#     "NOMINAL_COST": "cost",
-#     "COUPLING_GAIN": "coupling_gain",
-#     "NUM_COLLISIONS": "num_collisions",
-#     "MDP": "MDP",
-#     "ASD": "ASD",
-#     "IMBALANCE": "imbalance",
-#     "PSC": "PSC",
-#     "PATH_EFF": "path_efficiency",
-#     "MIN_EXPECTED_DISTANCE": "min_expected_distance",
-#     "MEAN_EXPECTED_DISTANCE": "mean_expected_distance",
-#     "MAX_COLLISION_RISK": "max_collision_risk",
-# }
-
-# METRIC_YLABELS = {
-#     "NOMINAL_COST": "Delta cost",
-#     "COUPLING_GAIN": "Delta coupling gain",
-#     "NUM_COLLISIONS": "Delta num_collisions",
-#     "MDP": "Delta MDP (m)",
-#     "ASD": "Delta ASD (m)",
-#     "IMBALANCE": "Delta imbalance (m)",
-#     "PSC": "Delta PSC",
-#     "PATH_EFF": "Delta path efficiency",
-#     "MIN_EXPECTED_DISTANCE": "Delta min_expected_distance (m)",
-#     "MEAN_EXPECTED_DISTANCE": "Delta mean_expected_distance (m)",
-#     "MAX_COLLISION_RISK": "Delta max_collision_risk",
-# }
-
-# METRIC_BETTER = {
-#     "NOMINAL_COST": "smaller",
-#     "COUPLING_GAIN": "larger",
-#     "NUM_COLLISIONS": "smaller",
-#     "MDP": "larger",
-#     "ASD": "larger",
-#     "IMBALANCE": "smaller",
-#     "PSC": "larger",
-#     "PATH_EFF": "larger",
-#     "MIN_EXPECTED_DISTANCE": "larger",
-#     "MEAN_EXPECTED_DISTANCE": "larger",
-#     "MAX_COLLISION_RISK": "smaller",
-# }
-
-# COST_ORDER = [
-#     "C_NOMINAL",
-#     "C_NUM_COLLISIONS",
-#     "C_MDP",
-#     "C_ASD",
-#     "C_IMBALANCE",
-#     "C_PSC",
-#     # "C_CONTROL_EFFORT",
-#     "C_COMBINED",
-# ]
-
-# COST_LABELS = {
-#     "C_NOMINAL": "c_nominal",
-#     "C_NUM_COLLISIONS": "c_num_collisions",
-#     "C_MDP": "c_MDP",
-#     "C_ASD": "c_ASD",
-#     "C_IMBALANCE": "c_imbalance",
-#     "C_PSC": "c_PSC",
-#     # "C_CONTROL_EFFORT": "c_control_effort",
-#     "C_COMBINED": "c_combined",
-# }
-# DEFAULT_CONFIG_PATH = Path("simple_ntc_tc_sim_config.yaml")
-
-
-
-from config import (
+from config_support_functions import (
     load_config,
     validate_config,
     build_distance_grid,
 )
-# CONFIG.PY
-# def load_config(path=DEFAULT_CONFIG_PATH):
-#     default_config = {
-#         "costs_to_run": ["C_NOMINAL"],
-#         "make_individual_metric_plots": False,
-#         "make_metric_pages": True,
-#         "make_pointwise_vs_ot_pages": True,
-#         "make_snapshot_pngs": False,
-#         "make_movies": True,
-#         "movie_costs": ["C_NOMINAL"],
-#         "movie_metric_sets": {
-#             "metrics_safety": ["NOMINAL_COST", "NUM_COLLISIONS", "ASD", "MDP"],
-#             "metrics_coord_effort": ["IMBALANCE", "PSC", "PATH_EFF", "CONTROL_EFFORT"],
-#         },
-#         "snapshot_distances": [10.0, 7.5, 5.0, 3.5, 2.5, 1.5, 1.0],
-#         "s_min": 1.0,
-#         "s_max": 10.0,
-#         "s_step": 0.5,
-#         "make_expected_metric_pages": True,
-#         "make_gamma_cost_comparison_pages": False,
-#         "make_coupling_gain_comparison_pages": False,
-#         "parallel": False,
-#         "max_workers": None,
-#         "nominal_time_discount": False,
-#         "discount_metrics_by_time": False,
-#                 "metrics_to_plot": METRIC_ORDER.copy(),
-#         "models_to_plot": ["ind", "resp_sample", "resp_marg", "marg"],
-#         "no_benefit_rel_threshold": 0.05,
-#         "show_bands": True,
-#         "make_marginal_pngs": True,
-#     }
-
-#     if not path.exists():
-#         return default_config
-
-#     with open(path, "r") as f:
-#         loaded = yaml.safe_load(f) or {}
-
-#     config = default_config.copy()
-#     config.update(loaded)
-#     return config
-
-# def validate_config(config):
-#     for cost_name in config["costs_to_run"]:
-#         if cost_name not in COST_ORDER:
-#             raise ValueError(f"Unknown cost in costs_to_run: {cost_name}")
-#     for cost_name in config["movie_costs"]:
-#         if cost_name not in COST_ORDER:
-#             raise ValueError(f"Unknown cost in movie_costs: {cost_name}")
-#     for _, metrics in config["movie_metric_sets"].items():
-#         for metric in metrics:
-#             if metric not in METRIC_ORDER:
-#                 raise ValueError(f"Unknown metric in movie_metric_sets: {metric}")
-#     for metric_name in config["metrics_to_plot"]:
-#         if metric_name not in METRIC_ORDER:
-#             raise ValueError(f"Unknown metric in metrics_to_plot: {metric_name}")
-#     if config["s_step"] <= 0:
-#         raise ValueError("s_step must be positive")
-#     if config["s_max"] < config["s_min"]:
-#         raise ValueError("s_max must be >= s_min")
-# def build_distance_grid(config):
-#     distances = np.arange(float(config["s_min"]), float(config["s_max"]) + 1e-9, float(config["s_step"]))
-#     return np.round(distances, 10)
 
 
-
-
-
-
-
-from trajectories import (
-    make_centerline_trajectory,
-    build_structured_library,
+from marginals import (
+    build_snapshot,
     preference_cost,
     trajectory_deviation_costs,
-    build_snapshot,
+    compute_agent_marginals,
 )
-# TRAJECTORIES.PY
-# def make_centerline_trajectory(start, goal, T):
-#     return np.column_stack([np.linspace(start[0], goal[0], T), np.linspace(start[1], goal[1], T)])
-
-# def lateral_profile(tau, profile_id=0):
-#     if profile_id == 0:
-#         return np.sin(np.pi * tau)
-#     if profile_id == 1:
-#         return np.sin(np.pi * tau) ** 1.35
-#     if profile_id == 2:
-#         return 16.0 * (tau ** 2) * ((1.0 - tau) ** 2)
-#     if profile_id == 3:
-#         return (tau ** 0.8) * ((1.0 - tau) ** 1.25)
-#     raise ValueError("Unknown profile_id")
-
-# def build_structured_library(start, goal, T=31):
-#     tau = np.linspace(0.0, 1.0, T)
-#     base = make_centerline_trajectory(start, goal, T)
-#     sign_x = np.sign(goal[0] - start[0]) if abs(goal[0] - start[0]) >= abs(goal[1] - start[1]) else 1.0
-
-#     trajectories = []
-#     metadata = []
-
-#     for profile_id in [0, 1]:
-#         traj = base.copy()
-#         trajectories.append(traj)
-#         metadata.append({"side": 0, "max_dev": 0.0, "profile_id": profile_id})
-
-#     for side in [-1.0, 1.0]:
-#         for dmax in LATERAL_LEVELS[1:]:
-#             for profile_id in [0, 1, 2, 3]:
-#                 profile = lateral_profile(tau, profile_id)
-#                 lateral = side * dmax * profile / np.max(np.abs(profile))
-#                 long_basis = 16.0 * (tau ** 2) * ((1.0 - tau) ** 2)
-#                 longi = 0.004 * (profile_id - 1.5) * long_basis
-#                 traj = base.copy()
-#                 traj[:, 0] += sign_x * longi
-#                 traj[:, 1] += lateral
-#                 traj[0] = start
-#                 traj[-1] = goal
-#                 trajectories.append(traj)
-#                 metadata.append({"side": int(side), "max_dev": float(dmax), "profile_id": profile_id})
-
-#     return np.array(trajectories), metadata
-
-# def preference_cost(traj):
-#     y = traj[:, 1]
-#     dy = np.diff(y)
-#     ddy = np.diff(y, n=2)
-#     max_dev = np.max(np.abs(y))
-#     return (
-#         3.0 * max_dev ** 2
-#         + 12.0 * max(0.0, max_dev - 0.30) ** 2
-#         + 30.0 * max(0.0, max_dev - 0.60) ** 2
-#         + 1.4 * np.sum(dy ** 2)
-#         + 2.8 * np.sum(ddy ** 2)
-#     )
-
-# def trajectory_deviation_costs(trajs, linear_traj):
-#     return np.array([float(np.mean(np.linalg.norm(tr - linear_traj, axis=1))) for tr in trajs])
-
-# def build_snapshot(snapshot_dist, T=31):
-#     start_h = np.array([-snapshot_dist / 2.0, 0.0])
-#     goal_h = np.array([snapshot_dist / 2.0, 0.0])
-#     start_r = np.array([snapshot_dist / 2.0, 0.0])
-#     goal_r = np.array([-snapshot_dist / 2.0, 0.0])
-#     H, meta_h = build_structured_library(start_h, goal_h, T=T)
-#     R, meta_r = build_structured_library(start_r, goal_r, T=T)
-#     h_linear = make_centerline_trajectory(start_h, goal_h, T)
-#     r_linear = make_centerline_trajectory(start_r, goal_r, T)
-#     return H, R, h_linear, r_linear, meta_h, meta_r
-
-
 
 
 from math_utils import (
@@ -312,19 +61,6 @@ from math_utils import (
     kl_divergence,
     normalize_matrix,
 )
-# MATH_UTILS.PY
-# def logsumexp(arr):
-#     m = np.max(arr)
-#     return m + np.log(np.sum(np.exp(arr - m)))
-# def softmax_from_logweights(logw):
-#     return np.exp(logw - logsumexp(logw))
-# def kl_divergence(p, q, eps=1e-300):
-#     return float(np.sum(p * (np.log(p + eps) - np.log(q + eps))))
-# def normalize_matrix(mat, eps=1e-12):
-#     mn = float(np.min(mat))
-#     mx = float(np.max(mat))
-#     return (mat - mn) / (mx - mn + eps)
-
 
 
 from ot_solvers import (
@@ -332,31 +68,6 @@ from ot_solvers import (
     solve_joint_kl,
     solve_marginal_kl,
 )
-
-# OT_SOLVERS.PY
-# def solve_response(p_r, costs, lam_resp):
-#     logw = np.log(p_r + 1e-300) - costs / lam_resp
-#     return softmax_from_logweights(logw)
-
-
-# def solve_joint_kl(gamma_ind, C, lam_joint):
-#     log_gamma = np.log(gamma_ind + 1e-300) - C / lam_joint
-#     return np.exp(log_gamma - logsumexp(log_gamma.ravel()))
-
-
-# def solve_marginal_kl(p_h, p_r, C, lam_h=LAM_H, lam_r=LAM_R, n_iter=5000, eta=0.04):
-#     gamma = np.outer(p_h, p_r).copy()
-#     eps = 1e-300
-#     for _ in range(n_iter):
-#         alpha = gamma.sum(axis=1)
-#         beta = gamma.sum(axis=0)
-#         grad = C + lam_h * (np.log(alpha[:, None] + eps) - np.log(p_h[:, None] + eps) + 1.0) + lam_r * (np.log(beta[None, :] + eps) - np.log(p_r[None, :] + eps) + 1.0)
-#         gamma *= np.exp(-eta * grad)
-#         gamma /= gamma.sum()
-#     return gamma
-
-
-
 
 
 from metrics import (
@@ -382,213 +93,6 @@ from metrics import (
     expected_robot,
     compute_time_indexed_metrics,
 )
-# METRICS.PY
-# def nominal_pairwise_cost(tr_h, tr_r, nominal_time_discount=False):
-#     d = np.linalg.norm(tr_h - tr_r, axis=1)
-#     t = np.arange(1, len(tr_h) + 1)
-
-#     if nominal_time_discount:
-#         w = 1.0 / t
-#     else:
-#         w = np.ones_like(t, dtype=float)
-
-#     comfort_barrier = 1.0 / (1.0 + np.exp(12.0 * (d - 0.65)))
-#     overlap = np.exp(-(d / 0.22) ** 2)
-#     return float(np.sum(w * (3.0 * comfort_barrier + 7.0 * overlap)))
-
-
-# def closest_approach(tr_h, tr_r):
-#     d = np.linalg.norm(tr_h - tr_r, axis=1)
-#     idx = int(np.argmin(d))
-#     t = idx + 1  # 1-indexed time, consistent with nominal cost
-#     return float(d[idx]), t
-
-
-# def metric_mdp(tr_h, tr_r):
-#     d_min, _ = closest_approach(tr_h, tr_r)
-#     return d_min
-
-
-# def metric_mdp_discounted(tr_h, tr_r):
-#     d_min, t_min = closest_approach(tr_h, tr_r)
-#     return float(d_min / float(t_min))
-
-
-# def metric_asd(tr_h, tr_r):
-#     return float(np.mean(np.linalg.norm(tr_h - tr_r, axis=1)))
-
-# def pairwise_distance_time_matrix(H, R):
-#     N, M = len(H), len(R)
-#     T = H.shape[1]
-#     D = np.zeros((N, M, T))
-
-#     for i in range(N):
-#         for j in range(M):
-#             D[i, j, :] = np.linalg.norm(H[i] - R[j], axis=1)
-
-#     return D
-
-
-# def expected_distance_over_time(gamma, D):
-#     return np.sum(gamma[:, :, None] * D, axis=(0, 1))
-
-
-# def collision_risk_over_time(gamma, D, threshold=COLLISION_DISTANCE_M):
-#     return np.sum(gamma[:, :, None] * (D < threshold), axis=(0, 1))
-
-# def path_length(tr):
-#     return float(np.sum(np.linalg.norm(np.diff(tr, axis=0), axis=1)))
-
-
-# def straight_distance(tr):
-#     return float(np.linalg.norm(tr[-1] - tr[0]))
-
-
-# def metric_path_efficiency_pair(tr_h, tr_r):
-#     eff_h = straight_distance(tr_h) / max(path_length(tr_h), 1e-12)
-#     eff_r = straight_distance(tr_r) / max(path_length(tr_r), 1e-12)
-#     return 0.5 * (eff_h + eff_r)
-
-
-# def metric_control_effort_pair(tr_h, tr_r):
-#     ah = np.diff(tr_h, n=2, axis=0)
-#     ar = np.diff(tr_r, n=2, axis=0)
-#     return float(np.sum(np.linalg.norm(ah, axis=1) ** 2) + np.sum(np.linalg.norm(ar, axis=1) ** 2))
-
-
-# def metric_imbalance_pair(tr_h, tr_r):
-#     return abs(float(np.max(np.abs(tr_h[:, 1]))) - float(np.max(np.abs(tr_r[:, 1]))))
-
-
-# def sign_with_zero(x, eps=1e-9):
-#     if x > eps:
-#         return 1.0
-#     if x < -eps:
-#         return -1.0
-#     return 0.0
-
-
-
-# def metric_psc_pair(tr_h, tr_r):
-#     y_h = tr_h[:, 1]
-#     y_r = tr_r[:, 1]
-
-#     # Ignore endpoints because trajectories begin/end on the centerline.
-#     y_h = y_h[1:-1]
-#     y_r = y_r[1:-1]
-
-#     psc_t = np.array([
-#         -sign_with_zero(yh) * sign_with_zero(yr)
-#         for yh, yr in zip(y_h, y_r)
-#     ])
-
-#     return float(np.mean(psc_t))
-
-# def metric_collision_pair(tr_h, tr_r, discount_collision_by_time=False):
-#     d_min, t_min = closest_approach(tr_h, tr_r)
-
-#     if d_min > COLLISION_DISTANCE_M:
-#         return 0.0
-
-#     if discount_collision_by_time:
-#         return 1.0 / float(t_min)
-
-#     return 1.0
-
-
-# def compute_pairwise_metric_matrices(
-#         H,
-#         R,
-#         nominal_time_discount=False,
-#         discount_metrics_by_time=False,
-#     ):
-#     N, M = len(H), len(R)
-#     # mats = {name: np.zeros((N, M)) for name in METRIC_ORDER}
-#     PAIRWISE_METRICS = [name for name in METRIC_ORDER if name != "COUPLING_GAIN"]
-#     mats = {name: np.zeros((N, M)) for name in PAIRWISE_METRICS}
-#     for i in range(N):
-#         for j in range(M):
-#             h, r = H[i], R[j]
-#             mats["NOMINAL_COST"][i, j] = nominal_pairwise_cost(
-#                 h,
-#                 r,
-#                 nominal_time_discount=nominal_time_discount,
-#             )
-#             mats["NUM_COLLISIONS"][i, j] = metric_collision_pair(
-#                 h,
-#                 r,
-#                 discount_collision_by_time=discount_metrics_by_time,
-#             )
-
-#             if discount_metrics_by_time:
-#                 mats["MDP"][i, j] = metric_mdp_discounted(h, r)
-#             else:
-#                 mats["MDP"][i, j] = metric_mdp(h, r)
-#             mats["ASD"][i, j] = metric_asd(h, r)
-#             mats["IMBALANCE"][i, j] = metric_imbalance_pair(h, r)
-#             mats["PSC"][i, j] = metric_psc_pair(h, r)
-#             mats["PATH_EFF"][i, j] = metric_path_efficiency_pair(h, r)
-#             # mats["CONTROL_EFFORT"][i, j] = metric_control_effort_pair(h, r)
-#     return mats
-
-
-# def compute_response_sample_metric_vectors(
-#         h_linear,
-#         R,
-#         nominal_time_discount=False,
-#         discount_metrics_by_time=False,
-#     ):
-#     # vecs = {name: np.zeros(len(R)) for name in METRIC_ORDER}
-#     PAIRWISE_METRICS = [name for name in METRIC_ORDER if name != "COUPLING_GAIN"]
-#     vecs = {name: np.zeros(len(R)) for name in PAIRWISE_METRICS}
-#     for j, r in enumerate(R):
-#         h = h_linear
-#         vecs["NOMINAL_COST"][j] = nominal_pairwise_cost(
-#             h,
-#             r,
-#             nominal_time_discount=nominal_time_discount,
-#         )
-#         vecs["NUM_COLLISIONS"][j] = metric_collision_pair(
-#             h,
-#             r,
-#             discount_collision_by_time=discount_metrics_by_time,
-#         )
-
-#         if discount_metrics_by_time:
-#             vecs["MDP"][j] = metric_mdp_discounted(h, r)
-#         else:
-#             vecs["MDP"][j] = metric_mdp(h, r)
-#         vecs["ASD"][j] = metric_asd(h, r)
-#         vecs["IMBALANCE"][j] = metric_imbalance_pair(h, r)
-#         vecs["PSC"][j] = metric_psc_pair(h, r)
-#         vecs["PATH_EFF"][j] = metric_path_efficiency_pair(h, r)
-#         # vecs["CONTROL_EFFORT"][j] = metric_control_effort_pair(h, r)
-#     return vecs
-
-
-# def expected_joint(gamma, mat):
-#     return float(np.sum(gamma * mat))
-
-
-# def expected_robot(q_r, vec):
-#     return float(np.sum(q_r * vec))
-
-# def compute_time_indexed_metrics(gamma, D):
-#     expected_d_t = expected_distance_over_time(gamma, D)
-#     collision_risk_t = collision_risk_over_time(gamma, D)
-
-#     return {
-#         "MIN_EXPECTED_DISTANCE": float(np.min(expected_d_t)),
-#         "MEAN_EXPECTED_DISTANCE": float(np.mean(expected_d_t)),
-#         "MAX_COLLISION_RISK": float(np.max(collision_risk_t)),
-#     }
-
-
-
-
-
-
-
 
 
 
@@ -598,108 +102,8 @@ from costs import (
     response_cost_vector_from_name,
 )
 
-# COSTS.PY
-# def metric_to_cost_matrix(metric_name, metric_matrix):
-#     if metric_name == "COUPLING_GAIN":
-#         raise ValueError("COUPLING_GAIN is distribution-level and cannot be used as a pairwise cost.")
-#     if metric_name in ["NOMINAL_COST", "NUM_COLLISIONS", "IMBALANCE", "CONTROL_EFFORT"]:
-#         return metric_matrix.copy()
-#     if metric_name in ["MDP", "ASD", "PATH_EFF"]:
-#         return -metric_matrix
-#     if metric_name == "PSC":
-#         return (1.0 - metric_matrix) / 2.0
-#     raise ValueError(f"Unknown metric_name={metric_name}")
-
-
-# def build_cost_matrices(metric_mats):
-#     costs = {
-#         "C_NOMINAL": metric_mats["NOMINAL_COST"].copy(),
-#         "C_NUM_COLLISIONS": metric_to_cost_matrix("NUM_COLLISIONS", metric_mats["NUM_COLLISIONS"]),
-#         "C_MDP": metric_to_cost_matrix("MDP", metric_mats["MDP"]),
-#         "C_ASD": metric_to_cost_matrix("ASD", metric_mats["ASD"]),
-#         "C_IMBALANCE": metric_to_cost_matrix("IMBALANCE", metric_mats["IMBALANCE"]),
-#         "C_PSC": metric_to_cost_matrix("PSC", metric_mats["PSC"]),
-#         # "C_CONTROL_EFFORT": metric_to_cost_matrix("CONTROL_EFFORT", metric_mats["CONTROL_EFFORT"]),
-#     }
-#     # combined_terms = [normalize_matrix(costs[name]) for name in [
-#     #     "C_NOMINAL", "C_NUM_COLLISIONS", "C_MDP", "C_ASD", "C_IMBALANCE", "C_PSC", "C_CONTROL_EFFORT"
-#     # ]]
-#     combined_terms = [normalize_matrix(costs[name]) for name in [
-#         "C_NOMINAL",
-#         "C_NUM_COLLISIONS",
-#         "C_MDP",
-#         "C_ASD",
-#         "C_IMBALANCE",
-#         "C_PSC",
-#     ]]
-#     costs["C_COMBINED"] = sum(combined_terms) / len(combined_terms)
-#     return costs
-
-
-# def response_cost_vector_from_name(cost_name, h_linear, R, nominal_time_discount=False):
-#     vecs = compute_response_sample_metric_vectors(
-#         h_linear,
-#         R,
-#         nominal_time_discount=nominal_time_discount,
-#     )
-#     if cost_name == "C_NOMINAL":
-#         return vecs["NOMINAL_COST"]
-#     if cost_name == "C_NUM_COLLISIONS":
-#         return vecs["NUM_COLLISIONS"]
-#     if cost_name == "C_MDP":
-#         return -vecs["MDP"]
-#     if cost_name == "C_ASD":
-#         return -vecs["ASD"]
-#     if cost_name == "C_IMBALANCE":
-#         return vecs["IMBALANCE"]
-#     if cost_name == "C_PSC":
-#         return (1.0 - vecs["PSC"]) / 2.0
-#     # if cost_name == "C_CONTROL_EFFORT":
-#     #     return vecs["CONTROL_EFFORT"]
-#     if cost_name == "C_COMBINED":
-#         component_costs = [
-#             vecs["NOMINAL_COST"],
-#             vecs["NUM_COLLISIONS"],
-#             -vecs["MDP"],
-#             -vecs["ASD"],
-#             vecs["IMBALANCE"],
-#             (1.0 - vecs["PSC"]) / 2.0,
-#         ]
-#         return sum(normalize_matrix(v) for v in component_costs) / len(component_costs)
-#     raise ValueError(f"Unknown cost_name={cost_name}")
-
-
-
-
-
-
-
-
-
 
 from pointwise import solve_pointwise_pair
-
-# POINTWISE.PY
-# def solve_pointwise_pair(H, R, h_linear, r_linear, cost_matrix):
-#     normalized_cost = normalize_matrix(cost_matrix)
-#     dev_h = normalize_matrix(trajectory_deviation_costs(H, h_linear))
-#     dev_r = normalize_matrix(trajectory_deviation_costs(R, r_linear))
-#     J_pair = normalized_cost + ALPHA_H * dev_h[:, None] + ALPHA_R * dev_r[None, :]
-#     return np.unravel_index(np.argmin(J_pair), J_pair.shape)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 from plotting import (
@@ -717,569 +121,6 @@ from plotting import (
     save_coupling_gain_comparison_page,
     save_pair_vs_gamma_page,
 )
-
-# PLOTTING.PY
-# def top_joint_pairs(gamma, k=TOP_K):
-#     idx = np.argsort(gamma.ravel())[::-1][:k]
-#     nR = gamma.shape[1]
-#     return [(rank, flat_idx // nR, flat_idx % nR) for rank, flat_idx in enumerate(idx, start=1)]
-
-
-# def top_robot_indices(q_r, k=TOP_K):
-#     idx = np.argsort(q_r)[::-1][:k]
-#     return [(rank, j) for rank, j in enumerate(idx, start=1)]
-
-
-
-
-# def plot_pair(ax, H, R, i, j, color, linewidth=2.0, linestyle="-", alpha=1.0):
-#     # Both trajectories use the same style so color encodes only the solution type.
-#     ax.plot(H[i][:, 0], H[i][:, 1], color=color, linewidth=linewidth, linestyle=linestyle, alpha=alpha)
-#     ax.plot(R[j][:, 0], R[j][:, 1], color=color, linewidth=linewidth, linestyle=linestyle, alpha=alpha)
-
-
-# def add_solution_legend(ax):
-#     handles = [
-#         Line2D([0], [0], color="green", lw=2.0, label="top K OT samples"),
-#         Line2D([0], [0], color="red", lw=3.0, label="OT mode: argmax gamma"),
-#         Line2D([0], [0], color="black", lw=3.0, label="pointwise optimum: argmin J_pair"),
-#     ]
-#     ax.legend(handles=handles, loc="best", fontsize=7)
-
-
-
-# def plot_marginal(ax, trajectories, probs, title):
-#     ax.axhline(0.0, linewidth=1, color="gray")
-
-#     pmax = max(float(np.max(probs)), 1e-12)
-
-#     for tr, p in sorted(zip(trajectories, probs), key=lambda x: x[1]):
-#         weight = float(p / pmax)
-#         ax.plot(
-#             tr[:, 0],
-#             tr[:, 1],
-#             linewidth=0.4 + 4.0 * weight,
-#             alpha=0.08 + 0.85 * weight,
-#             color="green",
-#         )
-
-#     imax = int(np.argmax(probs))
-#     ax.plot(
-#         trajectories[imax][:, 0],
-#         trajectories[imax][:, 1],
-#         linewidth=3.5,
-#         color="red",
-#         label=f"MAP, p={probs[imax]:.4f}",
-#     )
-
-#     ax.set_title(title)
-#     ax.set_xlabel("x")
-#     ax.set_ylabel("y")
-#     ax.set_aspect("equal")
-#     ax.grid(True, alpha=0.25)
-#     ax.legend(fontsize=8)
-
-
-# def save_marginal_page(snapshot_dist):
-#     H, R, h_linear, r_linear, _, _ = build_snapshot(snapshot_dist)
-
-#     pref_h = np.array([preference_cost(h) for h in H])
-#     pref_r = np.array([preference_cost(r) for r in R])
-
-#     p_h = softmax_from_logweights(-LAM_PREF * pref_h)
-#     p_r = softmax_from_logweights(-LAM_PREF * pref_r)
-
-#     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
-
-#     plot_marginal(
-#         axes[0],
-#         H,
-#         p_h,
-#         f"Human marginal p_h | s={snapshot_dist:.1f}m",
-#     )
-
-#     plot_marginal(
-#         axes[1],
-#         R,
-#         p_r,
-#         f"Robot marginal p_r | s={snapshot_dist:.1f}m",
-#     )
-
-#     fig.suptitle("Marginal trajectory distributions: thickness/opacity = probability")
-#     fig.tight_layout()
-
-#     outpath = OUTDIR / f"marginals_{str(snapshot_dist).replace('.', '_')}m.png"
-#     fig.savefig(outpath, dpi=180, bbox_inches="tight")
-#     plt.close(fig)
-
-# def model_plot_style(model_key):
-#     styles = {
-#         "ind": {"marker": "o", "linestyle": "-"},
-#         "resp_sample": {"marker": "s", "linestyle": "--"},
-#         "resp_marg": {"marker": "^", "linestyle": "-."},
-#         "joint": {"marker": "D", "linestyle": ":"},
-#     }
-#     return styles[model_key]
-
-
-# def find_no_benefit_cutoff(xs, panel_series, eps=NO_BENEFIT_EPS):
-#     """
-#     Returns the smallest s such that all model curves remain inside
-#     [-eps, eps] for that s and every larger s.
-
-#     If no such cutoff exists, returns None.
-#     """
-#     arr = np.vstack(panel_series)
-#     inside = np.all(np.abs(arr) <= eps, axis=0)
-
-#     for k in range(len(xs)):
-#         if np.all(inside[k:]):
-#             return xs[k]
-
-#     return None
-
-# def save_metric_page(rows_for_cost, cost_name, rel_threshold=0.05, show_bands=True):
-#     xs = [row["distance_m"] for row in rows_for_cost]
-#     fig, axes = plt.subplots(6, 2, figsize=(15.0, 16.0), sharex=False)
-#     axes = axes.ravel()
-#     model_keys = [
-#         ("ind", "Perf diff: NTC_marg - TC: p_h p_r"),
-#         ("resp_sample", "Perf diff: NTC_marg - TC: q_r*delta(h-h*)"),
-#         ("resp_marg", "Perf diff: NTC_marg - TC: q_r*p_h"),
-#         ("joint", "Perf diff: NTC_marg - NTC: KL(joint)"),
-#     ]
-#     for ax, metric in zip(axes, METRIC_ORDER):
-#         panel_vals = []
-#         panel_series = []
-#         for model_key, label in model_keys:
-#             # ys = [row[f"DeltaE_{model_key}_{metric}"] for row in rows_for_cost]
-#             ys = [row[f"DeltaE_{model_key}_{metric}"] for row in rows_for_cost]
-#             panel_vals.extend(ys)
-#             panel_series.append(np.array(ys, dtype=float))
-#             style = model_plot_style(model_key)
-#             if metric == "PSC":
-#                 style = model_plot_style(model_key)
-#                 ax.plot(
-#                     xs,
-#                     ys,
-#                     marker=style["marker"],
-#                     linestyle="-",
-#                     linewidth=2.0,
-#                     markersize=5,
-#                     label=label,
-#                 )
-#             else:
-#                 ax.plot(xs, ys, marker="o", linestyle="-", linewidth=2.0, label=label)
-#         ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
-        
-#         if show_bands:
-#             thresholds = no_benefit_thresholds(rows_for_cost, metric, rel_threshold)
-
-#             ax.fill_between(
-#                 xs,
-#                 -thresholds,
-#                 thresholds,
-#                 color="gray",
-#                 alpha=0.15,
-#                 label="within 5% of NTC KL(marginals)",
-#             )
-
-#             s_cutoff = find_no_benefit_cutoff_relative(xs, panel_series, thresholds)
-
-#             if s_cutoff is not None:
-#                 ax.axvline(
-#                     s_cutoff,
-#                     color="purple",
-#                     linewidth=2.0,
-#                     linestyle=":",
-#                     label=f"end of coordination benefit: s={s_cutoff:g}",
-#                 )
-
-#         ax.set_title(f"Collaboration benefit: {METRIC_LABELS[metric]}")
-#         ax.set_ylabel(METRIC_YLABELS[metric])
-#         ax.set_xlabel("Start separation s (m)")
-#         ax.set_xticks(xs)
-#         ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#         ax.grid(True, alpha=0.25)
-#     axes[1].legend(loc="best", fontsize=8)
-#     fig.suptitle(f"Metric improvements for optimization cost: {COST_LABELS[cost_name]}", y=0.995)
-#     fig.tight_layout()
-#     fig.savefig(OUTDIR / f"metric_page_{COST_LABELS[cost_name]}.png", dpi=180, bbox_inches="tight")
-#     plt.close(fig)
-
-
-# def save_expected_metric_page(rows_for_cost, cost_name):
-#     xs = [row["distance_m"] for row in rows_for_cost]
-
-#     fig, axes = plt.subplots(6, 2, figsize=(15.0, 16.0), sharex=False)
-#     axes = axes.ravel()
-
-#     model_keys = [
-#         ("ind", "TC: p_h p_r"),
-#         ("resp_sample", "TC: q_r*delta(h-h*)"),
-#         ("resp_marg", "TC: q_r*p_h"),
-#         ("joint", "NTC: KL(joint)"),
-#         ("marg", "NTC: KL(marginals)"),
-#     ]
-
-#     for ax, metric in zip(axes, METRIC_ORDER):
-#         ref = np.array([row[f"E_marg_{metric}"] for row in rows_for_cost], dtype=float)
-
-#         panel_vals = []
-#         for model_key, label in model_keys:
-#             ys = np.array([row[f"E_{model_key}_{metric}"] for row in rows_for_cost], dtype=float)
-#             panel_vals.extend(list(ys))
-
-#             if model_key == "marg":
-#                 ax.plot(
-#                     xs,
-#                     ys,
-#                     linewidth=3.0,
-#                     label=label
-#                 )
-#             else:
-#                 ax.plot(
-#                     xs,
-#                     ys,
-#                     linewidth=2.0,
-#                     label=label
-#                 )
-
-#         max_abs = max(max(abs(v) for v in panel_vals), 1e-12)
-#         band = 0.10 * max_abs
-
-#         ax.fill_between(
-#             xs,
-#             ref - band,
-#             ref + band,
-#             color="gray",
-#             alpha=0.12,
-#             label="within 10% of NTC KL(marginals)"
-#         )
-
-#         ax.set_title(f"Expected {METRIC_LABELS[metric]} values")
-#         ax.set_ylabel(f"E[{METRIC_LABELS[metric]}]")
-#         ax.set_xlabel("Start separation s (m)")
-#         ax.set_xticks(xs)
-#         ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#         ax.grid(True, alpha=0.25)
-
-#     axes[1].legend(loc="best", fontsize=8)
-#     fig.suptitle(
-#         f"Expected metric values for optimization cost: {COST_LABELS[cost_name]}",
-#         y=0.995
-#     )
-#     fig.tight_layout()
-#     fig.savefig(
-#         OUTDIR / f"expected_metric_page_{COST_LABELS[cost_name]}.png",
-#         dpi=180,
-#         bbox_inches="tight"
-#     )
-#     plt.close(fig)
-
-
-# def save_individual_expected_metric_plot(
-#         rows_for_cost,
-#         cost_name,
-#         metric,
-#         models_to_plot,
-#     ):
-#     xs = [row["distance_m"] for row in rows_for_cost]
-
-#     model_labels = {
-#         "ind": "TC: p_h p_r",
-#         "resp_sample": "TC: q_r*delta(h-h*)",
-#         "resp_marg": "TC: q_r*p_h",
-#         "joint": "NTC: KL(joint)",
-#         "marg": "NTC: KL(marginals)",
-#     }
-
-#     fig, ax = plt.subplots(figsize=(8.0, 5.0))
-
-#     for model_key in models_to_plot:
-#         ys = [row[f"E_{model_key}_{metric}"] for row in rows_for_cost]
-
-#         if model_key == "marg":
-#             ax.plot(xs, ys, linewidth=3.0, label=model_labels[model_key])
-#         else:
-#             ax.plot(xs, ys, linewidth=2.0, label=model_labels[model_key])
-
-#     ax.set_title(f"Expected {METRIC_LABELS[metric]} values")
-#     ax.set_ylabel(f"E[{METRIC_LABELS[metric]}]")
-#     ax.set_xlabel("Start separation s (m)")
-#     ax.set_xticks(xs)
-#     ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#     ax.grid(True, alpha=0.25)
-#     ax.legend(loc="best", fontsize=8)
-
-#     fig.tight_layout()
-#     fig.savefig(
-#         OUTDIR / f"expected_metric_{metric}_c_{COST_LABELS[cost_name]}.png",
-#         dpi=220,
-#         bbox_inches="tight",
-#     )
-#     plt.close(fig)
-
-
-# def best_tc_value_for_metric(row, metric):
-#     tc_models = ["ind", "resp_sample", "resp_marg"]
-#     vals = [row[f"E_{model}_{metric}"] for model in tc_models]
-
-#     if METRIC_BETTER[metric] == "larger":
-#         return max(vals)
-#     return min(vals)
-
-
-# def no_benefit_thresholds(rows_for_cost, metric, rel_threshold):
-#     thresholds = []
-
-#     for row in rows_for_cost:
-#         ntc = row[f"E_marg_{metric}"]
-#         thresholds.append(float(rel_threshold) * abs(float(ntc)))
-
-#     return np.array(thresholds, dtype=float)
-
-
-# def find_no_benefit_cutoff_relative(xs, panel_series, thresholds):
-#     arr = np.vstack(panel_series)
-#     inside = np.all(np.abs(arr) <= thresholds[None, :], axis=0)
-
-#     for k in range(len(xs)):
-#         if np.all(inside[k:]):
-#             return xs[k]
-
-#     return None
-
-
-
-
-# def save_individual_delta_metric_plot(
-#         rows_for_cost,
-#         cost_name,
-#         metric,
-#         models_to_plot,
-#         rel_threshold,
-#         show_bands,
-#     ):
-#     xs = [row["distance_m"] for row in rows_for_cost]
-
-#     model_labels = {
-#         "ind": "Perf diff: NTC_marg - TC: p_h p_r",
-#         "resp_sample": "Perf diff: NTC_marg - TC: q_r*delta(h-h*)",
-#         "resp_marg": "Perf diff: NTC_marg - TC: q_r*p_h",
-#         "joint": "Perf diff: NTC_marg - NTC: KL(joint)",
-#         "marg": "NTC: KL(marginals)",
-#     }
-
-#     delta_models = [m for m in models_to_plot if m != "marg"]
-
-#     fig, ax = plt.subplots(figsize=(8.0, 5.0))
-
-#     panel_series = []
-
-#     for model_key in delta_models:
-#         ys = np.array(
-#             [row[f"DeltaE_{model_key}_{metric}"] for row in rows_for_cost],
-#             dtype=float,
-#         )
-#         panel_series.append(ys)
-
-#         ax.plot(
-#             xs,
-#             ys,
-#             marker="o",
-#             linestyle="-",
-#             linewidth=2.0,
-#             label=model_labels[model_key],
-#         )
-
-#     ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
-
-#     if show_bands:
-#         thresholds = no_benefit_thresholds(rows_for_cost, metric, rel_threshold)
-
-#         ax.fill_between(
-#             xs,
-#             -thresholds,
-#             thresholds,
-#             color="gray",
-#             alpha=0.15,
-#             label="within 5% of NTC KL(marginals)",
-#         )
-
-#         s_cutoff = find_no_benefit_cutoff_relative(xs, panel_series, thresholds)
-
-#         if s_cutoff is not None:
-#             ax.axvline(
-#                 s_cutoff,
-#                 color="purple",
-#                 linewidth=2.0,
-#                 linestyle=":",
-#                 label=f"end of coordination benefit: s={s_cutoff:g}",
-#             )
-
-#     ax.set_title(f"Collaboration benefit: {METRIC_LABELS[metric]}")
-#     ax.set_ylabel(METRIC_YLABELS[metric])
-#     ax.set_xlabel("Start separation s (m)")
-#     ax.set_xticks(xs)
-#     ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#     ax.grid(True, alpha=0.25)
-#     ax.legend(loc="best", fontsize=8)
-
-#     fig.tight_layout()
-#     fig.savefig(
-#         OUTDIR / f"metric_{metric}_c_{COST_LABELS[cost_name]}.png",
-#         dpi=220,
-#         bbox_inches="tight",
-#     )
-#     plt.close(fig)
-
-
-# def save_individual_metric_plots(
-#         rows_for_cost,
-#         cost_name,
-#         metrics_to_plot,
-#         models_to_plot,
-#         rel_threshold,
-#         show_bands,
-#     ):
-#     for metric in metrics_to_plot:
-#         save_individual_expected_metric_plot(
-#             rows_for_cost,
-#             cost_name,
-#             metric,
-#             models_to_plot,
-#         )
-#         save_individual_delta_metric_plot(
-#             rows_for_cost,
-#             cost_name,
-#             metric,
-#             models_to_plot,
-#             rel_threshold,
-#             show_bands,
-#         )
-
-
-# def save_gamma_cost_comparison_page(rows_by_cost, costs_to_compare):
-#     """
-#     Compare the NTC KL(marginals) models indexed by optimization cost.
-
-#     Each curve is one gamma*_c model.
-#     Each panel is one metric: E_{gamma*_c}[metric | s].
-
-#     This is not a DeltaE/collaboration-benefit plot.
-#     """
-#     if not costs_to_compare:
-#         return
-
-#     first_cost = costs_to_compare[0]
-#     xs = [row["distance_m"] for row in rows_by_cost[first_cost]]
-
-#     fig, axes = plt.subplots(6, 2, figsize=(16.0, 16.0), sharex=False)
-#     axes = axes.ravel()
-
-#     for ax, metric in zip(axes, METRIC_ORDER):
-#         for cost_name in costs_to_compare:
-#             rows_for_cost = rows_by_cost[cost_name]
-#             ys = [row[f"E_marg_{metric}"] for row in rows_for_cost]
-
-#             ax.plot(
-#                 xs,
-#                 ys,
-#                 linestyle="-",
-#                 linewidth=2.0,
-#                 label=f"gamma*_{COST_LABELS[cost_name]}",
-#             )
-
-#         ax.set_title(f"Expected {METRIC_LABELS[metric]} for each gamma*_c model")
-#         ax.set_ylabel(f"E_gamma*[{METRIC_LABELS[metric]}]")
-#         ax.set_xlabel("Start separation s (m)")
-#         ax.set_xticks(xs)
-#         ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#         ax.grid(True, alpha=0.25)
-
-#     axes[1].legend(loc="best", fontsize=8)
-#     fig.suptitle(
-#         "Comparison of NTC KL(marginals) models indexed by optimization cost",
-#         y=0.995
-#     )
-#     fig.tight_layout()
-#     fig.savefig(
-#         OUTDIR / "expected_metric_page_gamma_cost_comparison.png",
-#         dpi=180,
-#         bbox_inches="tight",
-#     )
-#     plt.close(fig)
-
-
-# def save_coupling_gain_comparison_page(rows_by_cost, costs_to_compare):
-#     """
-#     Plot coupling gain for each gamma*_c model across s.
-
-#     coupling_gain = KL(gamma*_c || p_h p_r)
-
-#     Each curve = one cost-indexed NTC KL(marginals) model
-#     """
-#     if not costs_to_compare:
-#         return
-
-#     first_cost = costs_to_compare[0]
-#     xs = [row["distance_m"] for row in rows_by_cost[first_cost]]
-
-#     fig, ax = plt.subplots(figsize=(10.0, 6.0))
-
-#     for cost_name in costs_to_compare:
-#         rows_for_cost = rows_by_cost[cost_name]
-#         ys = [row["E_marg_COUPLING_GAIN"] for row in rows_for_cost]
-
-#         ax.plot(
-#             xs,
-#             ys,
-#             linewidth=2.0,
-#             linestyle="-",
-#             label=f"gamma*_{COST_LABELS[cost_name]}",
-#         )
-
-#     ax.set_title("Coupling gain: KL(gamma*_c || p_h p_r)")
-#     ax.set_ylabel("coupling gain (KL)")
-#     ax.set_xlabel("Start separation s (m)")
-#     ax.set_xticks(xs)
-#     ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#     ax.grid(True, alpha=0.25)
-
-#     ax.legend(loc="best", fontsize=8)
-
-#     fig.tight_layout()
-#     fig.savefig(
-#         OUTDIR / "coupling_gain_comparison_page.png",
-#         dpi=180,
-#         bbox_inches="tight",
-#     )
-#     plt.close(fig)
-
-
-# def save_pair_vs_gamma_page(rows_for_cost, cost_name):
-#     xs = [row["distance_m"] for row in rows_for_cost]
-#     fig, axes = plt.subplots(6, 2, figsize=(15.0, 16.0), sharex=False)
-#     axes = axes.ravel()
-#     for ax, metric in zip(axes, METRIC_ORDER):
-#         ys = [row[f"pair_minus_gamma_{metric}"] for row in rows_for_cost]
-#         ax.plot(xs, ys, marker="o", linewidth=2.0, label="pointwise optimum - OT mode")
-#         ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--", label="no difference")
-#         ax.set_title(f"pointwise optimum - OT mode: {METRIC_LABELS[metric]}")
-#         ax.set_ylabel(f"Delta {METRIC_LABELS[metric]}")
-#         ax.set_xlabel("Start separation s (m)")
-#         ax.set_xticks(xs)
-#         ax.set_xticklabels([f"{x:g}" for x in xs], rotation=45)
-#         ax.grid(True, alpha=0.25)
-#     axes[1].legend(loc="best", fontsize=8)
-#     fig.suptitle(f"Pointwise optimizer vs OT modal pair for cost: {COST_LABELS[cost_name]}", y=0.995)
-#     fig.text(0.5, 0.006, "Plotted value = metric(h_pair*, r_pair*) - metric(h_gamma*, r_gamma*); (h_pair*, r_pair*) = argmin J_pair, J_pair = c_norm + alpha_h d_h_norm + alpha_r d_r_norm; (h_gamma*, r_gamma*) = argmax gamma_NTC_marg", ha="center", fontsize=9)
-#     fig.tight_layout(rect=[0.0, 0.025, 1.0, 0.985])
-#     fig.savefig(OUTDIR / f"pointwise_vs_ot_mode_{COST_LABELS[cost_name]}.png", dpi=180, bbox_inches="tight")
-#     plt.close(fig)
-
-
 
 
 
@@ -1473,6 +314,18 @@ def compute_cost_block(
 
 
 
+
+
+
+
+
+
+
+
+from models import build_model_distributions
+from expected_metric_values import compute_model_expected_metrics
+from pointwise_vs_ot_mode import compare_pointwise_and_ot_mode_pairs
+
 def compute_expected_metrics_for_models(
         H,
         R,
@@ -1483,10 +336,8 @@ def compute_expected_metrics_for_models(
         discount_metrics_by_time=False,
         ot_backend="custom",
     ):
-    pref_h = np.array([preference_cost(h) for h in H])
-    pref_r = np.array([preference_cost(r) for r in R])
-    p_h = softmax_from_logweights(-LAM_PREF * pref_h)
-    p_r = softmax_from_logweights(-LAM_PREF * pref_r)
+
+    p_h, p_r = compute_agent_marginals(H, R)
 
     metric_mats = compute_pairwise_metric_matrices(
         H,
@@ -1506,103 +357,78 @@ def compute_expected_metrics_for_models(
     cost_mats = build_cost_matrices(metric_mats)
     C = cost_mats[cost_name]
 
-    gamma_ind = np.outer(p_h, p_r)
-    q_r_sample = solve_response(
-        p_r,
-        response_cost_vector_from_name(
-            cost_name,
-            h_linear,
-            R,
-            nominal_time_discount=nominal_time_discount,
-        ),
-        LAM_RESP_SAMPLE,
-    )
-    q_r_marg = solve_response(p_r, np.sum(p_h[:, None] * C, axis=0), LAM_RESP_MARG)
-    gamma_joint = solve_joint_kl(gamma_ind, C, LAM_JOINT)
-    gamma_marg = solve_marginal_kl(
+
+    model_dists = build_model_distributions(
         p_h,
         p_r,
         C,
-        backend=ot_backend,
+        cost_name,
+        h_linear,
+        R,
+        nominal_time_discount=nominal_time_discount,
+        ot_backend=ot_backend,
     )
 
-    gamma_resp_sample = np.zeros_like(gamma_ind)
-    i_star = int(np.argmax(p_h))
-    gamma_resp_sample[i_star, :] = q_r_sample
+    gamma_ind = model_dists["ind"]
+    gamma_resp_sample = model_dists["resp_sample"]
+    gamma_resp_marg = model_dists["resp_marg"]
+    gamma_joint = model_dists["joint"]
+    gamma_marg = model_dists["marg"]
+    q_r_sample = model_dists["q_r_sample"]
+    q_r_marg = model_dists["q_r_marg"]
 
-    gamma_resp_marg = p_h[:, None] * q_r_marg[None, :]
-
-    coupling_gain = {
-        "ind": kl_divergence(gamma_ind, gamma_ind),
-        "resp_sample": kl_divergence(gamma_resp_sample, gamma_ind),
-        "resp_marg": kl_divergence(gamma_resp_marg, gamma_ind),
-        "joint": kl_divergence(gamma_joint, gamma_ind),
-        "marg": kl_divergence(gamma_marg, gamma_ind),
-    }
-
-    E = {model: {} for model in ["ind", "resp_sample", "resp_marg", "joint", "marg"]}
-
-    time_metrics = {
-        "ind": compute_time_indexed_metrics(gamma_ind, D_time),
-        "resp_sample": compute_time_indexed_metrics(gamma_resp_sample, D_time),
-        "resp_marg": compute_time_indexed_metrics(gamma_resp_marg, D_time),
-        "joint": compute_time_indexed_metrics(gamma_joint, D_time),
-        "marg": compute_time_indexed_metrics(gamma_marg, D_time),
-    }
-
-    for metric in METRIC_ORDER:
-        if metric == "COUPLING_GAIN":
-            E["ind"][metric] = coupling_gain["ind"]
-            E["resp_sample"][metric] = coupling_gain["resp_sample"]
-            E["resp_marg"][metric] = coupling_gain["resp_marg"]
-            E["joint"][metric] = coupling_gain["joint"]
-            E["marg"][metric] = coupling_gain["marg"]
-        elif metric in time_metrics["ind"]:
-            E["ind"][metric] = time_metrics["ind"][metric]
-            E["resp_sample"][metric] = time_metrics["resp_sample"][metric]
-            E["resp_marg"][metric] = time_metrics["resp_marg"][metric]
-            E["joint"][metric] = time_metrics["joint"][metric]
-            E["marg"][metric] = time_metrics["marg"][metric]
-        else:
-            E["ind"][metric] = expected_joint(gamma_ind, metric_mats[metric])
-            E["resp_sample"][metric] = expected_robot(q_r_sample, response_vecs[metric])
-            E["resp_marg"][metric] = float(np.sum(gamma_resp_marg * metric_mats[metric]))
-            E["joint"][metric] = expected_joint(gamma_joint, metric_mats[metric])
-            E["marg"][metric] = expected_joint(gamma_marg, metric_mats[metric])
-
-
+    E = compute_model_expected_metrics(
+        metric_mats,
+        D_time,
+        response_vecs,
+        gamma_ind,
+        gamma_resp_sample,
+        gamma_resp_marg,
+        gamma_joint,
+        gamma_marg,
+        q_r_sample,
+    )
 
     i_gamma, j_gamma = np.unravel_index(np.argmax(gamma_marg), gamma_marg.shape)
     i_pair, j_pair = solve_pointwise_pair(H, R, h_linear, r_linear, C)
 
-    pair_metric_values = {}
-    gamma_metric_values = {}
-    pair_minus_gamma = {}
-
-    for metric in METRIC_ORDER:
-        # if metric == "COUPLING_GAIN":
-        if metric in ["COUPLING_GAIN", "MIN_EXPECTED_DISTANCE", "MEAN_EXPECTED_DISTANCE", "MAX_COLLISION_RISK"]:
-            pair_metric_values[metric] = np.nan
-            gamma_metric_values[metric] = np.nan
-            pair_minus_gamma[metric] = np.nan
-        else:
-            pair_metric_values[metric] = float(metric_mats[metric][i_pair, j_pair])
-            gamma_metric_values[metric] = float(metric_mats[metric][i_gamma, j_gamma])
-            pair_minus_gamma[metric] = pair_metric_values[metric] - gamma_metric_values[metric]
-
+    (
+    pointwise_pair_metric_values,
+    ot_mode_pair_metric_values,
+    pointwise_minus_ot_mode,
+        ) = compare_pointwise_and_ot_mode_pairs(
+            metric_mats,
+            i_pair,
+            j_pair,
+            i_gamma,
+            j_gamma,
+        )
 
     return {
-        "p_h": p_h, "p_r": p_r,
+        "p_h": p_h,
+        "p_r": p_r,
+
         "model_dists": {
-            "ind": gamma_ind, "resp_sample": q_r_sample, "resp_marg": (p_h, q_r_marg),
-            "joint": gamma_joint, "marg": gamma_marg,
+            "ind": gamma_ind,
+            "resp_sample": q_r_sample,
+            "resp_marg": (p_h, q_r_marg),
+            "joint": gamma_joint,
+            "marg": gamma_marg,
         },
+
         "E": E,
-        "i_gamma": i_gamma, "j_gamma": j_gamma, "i_pair": i_pair, "j_pair": j_pair,
-        "pair_metric_values": pair_metric_values,
-        "gamma_metric_values": gamma_metric_values,
-        "pair_minus_gamma": pair_minus_gamma,
+
+        "i_gamma": i_gamma,
+        "j_gamma": j_gamma,
+        "i_pair": i_pair,
+        "j_pair": j_pair,
+        "pointwise_pair_metric_values": pointwise_pair_metric_values,
+        "ot_mode_pair_metric_values": ot_mode_pair_metric_values,
+        "pointwise_minus_ot_mode": pointwise_minus_ot_mode,
     }
+
+
+
 
 
 def collaboration_delta(metric, E_model, E_ref):
@@ -1625,9 +451,9 @@ def make_row(snapshot_dist, cost_name, sol):
         for metric in METRIC_ORDER:
             row[f"DeltaE_{model}_{metric}"] = collaboration_delta(metric, sol["E"][model][metric], sol["E"]["marg"][metric])
     for metric in METRIC_ORDER:
-        row[f"pair_minus_gamma_{metric}"] = sol["pair_minus_gamma"][metric]
-        row[f"pointwise_pair_{metric}"] = sol["pair_metric_values"][metric]
-        row[f"ot_mode_pair_{metric}"] = sol["gamma_metric_values"][metric]
+        row[f"pointwise_minus_ot_mode_{metric}"] = sol["pointwise_minus_ot_mode"][metric]
+        row[f"pointwise_pair_{metric}"] = sol["pointwise_pair_metric_values"][metric]
+        row[f"ot_mode_pair_{metric}"] = sol["ot_mode_pair_metric_values"][metric]
     return row
 
 

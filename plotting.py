@@ -575,7 +575,7 @@ def save_pair_vs_gamma_page(rows_for_cost, cost_name):
     fig, axes = plt.subplots(6, 2, figsize=(15.0, 16.0), sharex=False)
     axes = axes.ravel()
     for ax, metric in zip(axes, METRIC_ORDER):
-        ys = [row[f"pair_minus_gamma_{metric}"] for row in rows_for_cost]
+        ys = [row[f"pointwise_minus_ot_mode_{metric}"] for row in rows_for_cost]
         ax.plot(xs, ys, marker="o", linewidth=2.0, label="pointwise optimum - OT mode")
         ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--", label="no difference")
         ax.set_title(f"pointwise optimum - OT mode: {METRIC_LABELS[metric]}")
