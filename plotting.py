@@ -14,16 +14,12 @@ from constants import (
     COST_LABELS,
 )
 
-from trajectories import (
-    build_snapshot,
+from marginals import (
+    generate_trajectory_samples,
     preference_cost,
 )
 
 from math_utils import softmax_from_logweights
-
-
-
-
 
 
 
@@ -186,7 +182,7 @@ def save_metric_page(rows_for_cost, cost_name, rel_threshold=0.05, show_bands=Tr
 
 
 def save_marginal_page(snapshot_dist):
-    H, R, h_linear, r_linear, _, _ = build_snapshot(snapshot_dist)
+    H, R, h_linear, r_linear, _, _ = generate_trajectory_samples(snapshot_dist)
 
     pref_h = np.array([preference_cost(h) for h in H])
     pref_r = np.array([preference_cost(r) for r in R])

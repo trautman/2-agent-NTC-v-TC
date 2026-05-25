@@ -9,8 +9,7 @@ from constants import (
 
 from math_utils import normalize_matrix
 
-from trajectories import trajectory_deviation_costs
-
+from marginals import trajectory_deviation_costs
 
 def solve_pointwise_pair(H, R, h_linear, r_linear, cost_matrix):
     normalized_cost = normalize_matrix(cost_matrix)

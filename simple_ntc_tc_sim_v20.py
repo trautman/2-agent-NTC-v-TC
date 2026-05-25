@@ -48,10 +48,10 @@ from config_support_functions import (
 
 
 from marginals import (
-    build_snapshot,
+    generate_trajectory_samples,
     preference_cost,
     trajectory_deviation_costs,
-    compute_agent_marginals,
+    generate_marginals,
 )
 
 
@@ -132,7 +132,7 @@ from plotting import (
 
 
 def save_snapshot_five_panel(snapshot_dist, cost_name):
-    H, R, h_linear, r_linear, _, _ = build_snapshot(snapshot_dist)
+    H, R, h_linear, r_linear, _, _ = generate_trajectory_samples(snapshot_dist)
     sol = compute_expected_metrics_for_models(H, R, h_linear, r_linear, cost_name)
     E_ref = sol["E"]["marg"]
     fig = plt.figure(figsize=(14.0, 12.5))
@@ -179,7 +179,7 @@ def save_snapshot_five_panel(snapshot_dist, cost_name):
 
 
 def render_five_panel_on_axes(fig, axes, snapshot_dist, cost_name):
-    H, R, h_linear, r_linear, _, _ = build_snapshot(snapshot_dist)
+    H, R, h_linear, r_linear, _, _ = generate_trajectory_samples(snapshot_dist)
     sol = compute_expected_metrics_for_models(H, R, h_linear, r_linear, cost_name)
     E_ref = sol["E"]["marg"]
     panels = [("TC: p_h p_r", "ind"), ("TC: q_r*delta(h-h*)", "resp_sample"), ("TC: q_r*p_h", "resp_marg"), ("NTC: KL(joint)", "joint"), ("NTC: KL(marginals)", "marg")]
@@ -337,7 +337,7 @@ def compute_expected_metrics_for_models(
         ot_backend="custom",
     ):
 
-    p_h, p_r = compute_agent_marginals(H, R)
+    p_h, p_r = generate_marginals(H, R)
 
     metric_mats = compute_pairwise_metric_matrices(
         H,
@@ -464,7 +464,7 @@ def compute_row_only(
         discount_metrics_by_time=False,
         ot_backend="custom",
     ):
-    H, R, h_linear, r_linear, _, _ = build_snapshot(snapshot_dist)
+    H, R, h_linear, r_linear, _, _ = generate_trajectory_samples(snapshot_dist)
     sol = compute_expected_metrics_for_models(
         H,
         R,
