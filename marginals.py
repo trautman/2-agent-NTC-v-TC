@@ -10,14 +10,28 @@ from constants import (
 from math_utils import softmax_from_logweights
 
 
-def generate_marginals(samples_h, samples_r):
+def generate_marginals(state, T=31):
+    samples_h, samples_r, h_linear, r_linear, meta_h, meta_r = generate_trajectory_samples(
+        state,
+        T=T,
+    )
+
     pref_h = np.array([preference_cost(h) for h in samples_h])
     pref_r = np.array([preference_cost(r) for r in samples_r])
 
     p_h = softmax_from_logweights(-LAM_PREF * pref_h)
     p_r = softmax_from_logweights(-LAM_PREF * pref_r)
 
-    return p_h, p_r
+    return {
+        "samples_h": samples_h,
+        "samples_r": samples_r,
+        "p_h": p_h,
+        "p_r": p_r,
+        "h_linear": h_linear,
+        "r_linear": r_linear,
+        "meta_h": meta_h,
+        "meta_r": meta_r,
+    }
 
 
 def generate_trajectory_samples(state, T=31):
