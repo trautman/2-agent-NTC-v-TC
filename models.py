@@ -16,7 +16,7 @@ from ot_solvers import (
 )
 
 
-def build_model_distributions(
+def generate_joints(
         p_h,
         p_r,
         C,

@@ -16,19 +16,16 @@ def metric_to_cost_matrix(metric_name, metric_matrix):
     raise ValueError(f"Unknown metric_name={metric_name}")
 
 
-def build_cost_matrices(metric_mats):
+def generate_cost_matrices(metric_matrices):
     costs = {
-        "C_NOMINAL": metric_mats["NOMINAL_COST"].copy(),
-        "C_NUM_COLLISIONS": metric_to_cost_matrix("NUM_COLLISIONS", metric_mats["NUM_COLLISIONS"]),
-        "C_MDP": metric_to_cost_matrix("MDP", metric_mats["MDP"]),
-        "C_ASD": metric_to_cost_matrix("ASD", metric_mats["ASD"]),
-        "C_IMBALANCE": metric_to_cost_matrix("IMBALANCE", metric_mats["IMBALANCE"]),
-        "C_PSC": metric_to_cost_matrix("PSC", metric_mats["PSC"]),
-        # "C_CONTROL_EFFORT": metric_to_cost_matrix("CONTROL_EFFORT", metric_mats["CONTROL_EFFORT"]),
+        "C_NOMINAL": metric_matrices["NOMINAL_COST"].copy(),
+        "C_NUM_COLLISIONS": metric_to_cost_matrix("NUM_COLLISIONS", metric_matrices["NUM_COLLISIONS"]),
+        "C_MDP": metric_to_cost_matrix("MDP", metric_matrices["MDP"]),
+        "C_ASD": metric_to_cost_matrix("ASD", metric_matrices["ASD"]),
+        "C_IMBALANCE": metric_to_cost_matrix("IMBALANCE", metric_matrices["IMBALANCE"]),
+        "C_PSC": metric_to_cost_matrix("PSC", metric_matrices["PSC"]),
     }
-    # combined_terms = [normalize_matrix(costs[name]) for name in [
-    #     "C_NOMINAL", "C_NUM_COLLISIONS", "C_MDP", "C_ASD", "C_IMBALANCE", "C_PSC", "C_CONTROL_EFFORT"
-    # ]]
+    
     combined_terms = [normalize_matrix(costs[name]) for name in [
         "C_NOMINAL",
         "C_NUM_COLLISIONS",

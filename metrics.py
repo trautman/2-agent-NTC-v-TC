@@ -121,9 +121,10 @@ def metric_collision_pair(tr_h, tr_r, discount_collision_by_time=False):
 
     return 1.0
 
-def compute_pairwise_metric_matrices(
+def generate_metric_matrices(
         H,
         R,
+        h_linear=None,
         nominal_time_discount=False,
         discount_metrics_by_time=False,
     ):
@@ -153,8 +154,22 @@ def compute_pairwise_metric_matrices(
             mats["IMBALANCE"][i, j] = metric_imbalance_pair(h, r)
             mats["PSC"][i, j] = metric_psc_pair(h, r)
             mats["PATH_EFF"][i, j] = metric_path_efficiency_pair(h, r)
-            # mats["CONTROL_EFFORT"][i, j] = metric_control_effort_pair(h, r)
-    return mats
+    if h_linear is None:
+        return {
+            "joint": mats,
+        }
+
+    response = compute_response_sample_metric_vectors(
+        h_linear,
+        R,
+        nominal_time_discount=nominal_time_discount,
+        discount_metrics_by_time=discount_metrics_by_time,
+    )
+
+    return {
+        "joint": mats,
+        "response": response,
+    }
 
 
 def compute_response_sample_metric_vectors(

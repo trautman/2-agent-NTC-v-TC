@@ -87,8 +87,7 @@ from metrics import (
     sign_with_zero,
     metric_psc_pair,
     metric_collision_pair,
-    compute_pairwise_metric_matrices,
-    compute_response_sample_metric_vectors,
+    generate_metric_matrices,
     expected_joint,
     expected_robot,
     compute_time_indexed_metrics,
@@ -98,7 +97,7 @@ from metrics import (
 
 from costs import (
     metric_to_cost_matrix,
-    build_cost_matrices,
+    generate_cost_matrices,
     response_cost_vector_from_name,
 )
 
@@ -145,7 +144,7 @@ def save_snapshot_five_panel(snapshot_dist, cost_name):
     H, R, h_linear, r_linear, _, _ = generate_trajectory_samples(snapshot_dist)
     sol = compute_expected_metrics_for_models(snapshot_dist, cost_name)
 
-    E_ref = sol["E"]["marg"]
+    E_ref = sol["expected_values"]["marg"]
     fig = plt.figure(figsize=(14.0, 12.5))
     gs = fig.add_gridspec(2, 3)
     axes = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[0, 2]), fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])]
@@ -154,28 +153,28 @@ def save_snapshot_five_panel(snapshot_dist, cost_name):
     for ax, (title, kind) in zip(axes, panels):
         ax.axhline(0.0, linewidth=1, color="gray")
         if kind == "ind":
-            for _, i, j in top_joint_pairs(sol["model_dists"]["ind"]):
+            for _, i, j in top_joint_pairs(sol["joints"]["ind"]):
                 plot_pair(ax, H, R, i, j, color="green", linewidth=1.8, alpha=0.65)
         elif kind == "resp_sample":
             ax.plot(h_linear[:, 0], h_linear[:, 1], color="green", linestyle=":", linewidth=2.2, alpha=0.75)
-            for _, j in top_robot_indices(sol["model_dists"]["resp_sample"]):
+            for _, j in top_robot_indices(sol["joints"]["resp_sample"]):
                 ax.plot(R[j][:, 0], R[j][:, 1], color="green", linewidth=1.8, alpha=0.65)
         elif kind == "resp_marg":
-            p_h, q_r = sol["model_dists"]["resp_marg"]
+            p_h, q_r = sol["joints"]["resp_marg"]
             top_h = np.argsort(p_h)[::-1][:TOP_K]
             top_r = [j for _, j in top_robot_indices(q_r)]
             for i, j in zip(top_h, top_r):
                 plot_pair(ax, H, R, i, j, color="green", linewidth=1.8, alpha=0.65)
         elif kind == "joint":
-            for _, i, j in top_joint_pairs(sol["model_dists"]["joint"]):
+            for _, i, j in top_joint_pairs(sol["joints"]["joint"]):
                 plot_pair(ax, H, R, i, j, color="green", linewidth=1.8, alpha=0.65)
         else:
-            for _, i, j in top_joint_pairs(sol["model_dists"]["marg"]):
+            for _, i, j in top_joint_pairs(sol["joints"]["marg"]):
                 plot_pair(ax, H, R, i, j, color="green", linewidth=1.6, alpha=0.50)
             plot_pair(ax, H, R, sol["i_gamma"], sol["j_gamma"], color="red", linewidth=3.4)
             plot_pair(ax, H, R, sol["i_pair"], sol["j_pair"], color="black", linewidth=3.0)
             add_solution_legend(ax)
-        E_metrics = sol["E"][kind]
+        E_metrics = sol["expected_values"][kind]
         ax.set_title(f"{title} | s={snapshot_dist:.1f}m | {COST_LABELS[cost_name]}\n{metric_line('E', E_metrics)}\n{metric_line('DeltaE', E_metrics, E_ref)}", fontsize=10)
         ax.set_xlabel("x")
         ax.set_aspect("equal")
@@ -193,35 +192,35 @@ def render_five_panel_on_axes(fig, axes, snapshot_dist, cost_name):
     H, R, h_linear, r_linear, _, _ = generate_trajectory_samples(snapshot_dist)
     sol = compute_expected_metrics_for_models(snapshot_dist, cost_name)
     
-    E_ref = sol["E"]["marg"]
+    E_ref = sol["expected_values"]["marg"]
     panels = [("TC: p_h p_r", "ind"), ("TC: q_r*delta(h-h*)", "resp_sample"), ("TC: q_r*p_h", "resp_marg"), ("NTC: KL(joint)", "joint"), ("NTC: KL(marginals)", "marg")]
     for ax in axes:
         ax.clear()
         ax.axhline(0.0, linewidth=1, color="gray")
     for ax, (title, kind) in zip(axes, panels):
         if kind == "ind":
-            for _, i, j in top_joint_pairs(sol["model_dists"]["ind"]):
+            for _, i, j in top_joint_pairs(sol["joints"]["ind"]):
                 plot_pair(ax, H, R, i, j, color="green", linewidth=1.7, alpha=0.6)
         elif kind == "resp_sample":
             ax.plot(h_linear[:, 0], h_linear[:, 1], color="green", linestyle=":", linewidth=2.0, alpha=0.75)
-            for _, j in top_robot_indices(sol["model_dists"]["resp_sample"]):
+            for _, j in top_robot_indices(sol["joints"]["resp_sample"]):
                 ax.plot(R[j][:, 0], R[j][:, 1], color="green", linewidth=1.7, alpha=0.6)
         elif kind == "resp_marg":
-            p_h, q_r = sol["model_dists"]["resp_marg"]
+            p_h, q_r = sol["joints"]["resp_marg"]
             top_h = np.argsort(p_h)[::-1][:TOP_K]
             top_r = [j for _, j in top_robot_indices(q_r)]
             for i, j in zip(top_h, top_r):
                 plot_pair(ax, H, R, i, j, color="green", linewidth=1.7, alpha=0.6)
         elif kind == "joint":
-            for _, i, j in top_joint_pairs(sol["model_dists"]["joint"]):
+            for _, i, j in top_joint_pairs(sol["joints"]["joint"]):
                 plot_pair(ax, H, R, i, j, color="green", linewidth=1.7, alpha=0.6)
         else:
-            for _, i, j in top_joint_pairs(sol["model_dists"]["marg"]):
+            for _, i, j in top_joint_pairs(sol["joints"]["marg"]):
                 plot_pair(ax, H, R, i, j, color="green", linewidth=1.4, alpha=0.45)
             plot_pair(ax, H, R, sol["i_gamma"], sol["j_gamma"], color="red", linewidth=3.2)
             plot_pair(ax, H, R, sol["i_pair"], sol["j_pair"], color="black", linewidth=2.8)
             add_solution_legend(ax)
-        E_metrics = sol["E"][kind]
+        E_metrics = sol["expected_values"][kind]
         ax.set_title(f"{title} | s={snapshot_dist:.1f}m\n{metric_line('E', E_metrics)}\n{metric_line('DeltaE', E_metrics, E_ref)}", fontsize=10)
         ax.set_xlabel("x")
         ax.set_aspect("equal")
@@ -334,8 +333,8 @@ def compute_cost_block(
 
 
 
-from models import build_model_distributions
-from expected_metric_values import compute_model_expected_metrics
+from models import generate_joints
+from expected_metric_values import generate_expected_values
 from pointwise_vs_ot_mode import compare_pointwise_and_ot_mode_pairs
 
 def compute_expected_metrics_for_models(
@@ -355,29 +354,23 @@ def compute_expected_metrics_for_models(
     h_linear = marginals["h_linear"]
     r_linear = marginals["r_linear"]
 
-    metric_mats = compute_pairwise_metric_matrices(
+    metric_matrices = generate_metric_matrices(
         H,
         R,
+        h_linear=h_linear,
         nominal_time_discount=nominal_time_discount,
         discount_metrics_by_time=discount_metrics_by_time,
     )
 
-    D_time = pairwise_distance_time_matrix(H, R)
+    distance_time_matrix = pairwise_distance_time_matrix(H, R)
 
-    response_vecs = compute_response_sample_metric_vectors(
-        h_linear,
-        R,
-        nominal_time_discount=nominal_time_discount,
-        discount_metrics_by_time=discount_metrics_by_time,
-    )
-    cost_mats = build_cost_matrices(metric_mats)
-    C = cost_mats[cost_name]
+    cost_matrices = generate_cost_matrices(metric_matrices["joint"])
+    cost_matrix = cost_matrices[cost_name]
 
-
-    model_dists = build_model_distributions(
+    joints = generate_joints(
         p_h,
         p_r,
-        C,
+        cost_matrix,
         cost_name,
         h_linear,
         R,
@@ -385,18 +378,17 @@ def compute_expected_metrics_for_models(
         ot_backend=ot_backend,
     )
 
-    gamma_ind = model_dists["ind"]
-    gamma_resp_sample = model_dists["resp_sample"]
-    gamma_resp_marg = model_dists["resp_marg"]
-    gamma_joint = model_dists["joint"]
-    gamma_marg = model_dists["marg"]
-    q_r_sample = model_dists["q_r_sample"]
-    q_r_marg = model_dists["q_r_marg"]
+    gamma_ind = joints["ind"]
+    gamma_resp_sample = joints["resp_sample"]
+    gamma_resp_marg = joints["resp_marg"]
+    gamma_joint = joints["joint"]
+    gamma_marg = joints["marg"]
+    q_r_sample = joints["q_r_sample"]
+    q_r_marg = joints["q_r_marg"]
 
-    E = compute_model_expected_metrics(
-        metric_mats,
-        D_time,
-        response_vecs,
+    expected_values = generate_expected_values(
+        metric_matrices,
+        distance_time_matrix,
         gamma_ind,
         gamma_resp_sample,
         gamma_resp_marg,
@@ -406,14 +398,14 @@ def compute_expected_metrics_for_models(
     )
 
     i_gamma, j_gamma = np.unravel_index(np.argmax(gamma_marg), gamma_marg.shape)
-    i_pair, j_pair = solve_pointwise_pair(H, R, h_linear, r_linear, C)
+    i_pair, j_pair = solve_pointwise_pair(H, R, h_linear, r_linear, cost_matrix)
 
     (
     pointwise_pair_metric_values,
     ot_mode_pair_metric_values,
     pointwise_minus_ot_mode,
         ) = compare_pointwise_and_ot_mode_pairs(
-            metric_mats,
+            metric_matrices["joint"],
             i_pair,
             j_pair,
             i_gamma,
@@ -424,7 +416,7 @@ def compute_expected_metrics_for_models(
         "p_h": p_h,
         "p_r": p_r,
 
-        "model_dists": {
+        "joints": {
             "ind": gamma_ind,
             "resp_sample": q_r_sample,
             "resp_marg": (p_h, q_r_marg),
@@ -432,7 +424,7 @@ def compute_expected_metrics_for_models(
             "marg": gamma_marg,
         },
 
-        "E": E,
+        "expected_values": expected_values,
 
         "i_gamma": i_gamma,
         "j_gamma": j_gamma,
@@ -462,10 +454,10 @@ def make_row(snapshot_dist, cost_name, sol):
     }
     for model in ["ind", "resp_sample", "resp_marg", "joint", "marg"]:
         for metric in METRIC_ORDER:
-            row[f"E_{model}_{metric}"] = sol["E"][model][metric]
+            row[f"E_{model}_{metric}"] = sol["expected_values"][model][metric]
     for model in ["ind", "resp_sample", "resp_marg", "joint"]:
         for metric in METRIC_ORDER:
-            row[f"DeltaE_{model}_{metric}"] = collaboration_delta(metric, sol["E"][model][metric], sol["E"]["marg"][metric])
+            row[f"DeltaE_{model}_{metric}"] = collaboration_delta(metric, sol["expected_values"][model][metric], sol["expected_values"]["marg"][metric])
     for metric in METRIC_ORDER:
         row[f"pointwise_minus_ot_mode_{metric}"] = sol["pointwise_minus_ot_mode"][metric]
         row[f"pointwise_pair_{metric}"] = sol["pointwise_pair_metric_values"][metric]

@@ -11,10 +11,9 @@ from metrics import (
 from constants import METRIC_ORDER
 
 
-def compute_model_expected_metrics(
-        metric_mats,
+def generate_expected_values(
+        metric_matrices,
         D_time,
-        response_vecs,
         gamma_ind,
         gamma_resp_sample,
         gamma_resp_marg,
@@ -22,6 +21,11 @@ def compute_model_expected_metrics(
         gamma_marg,
         q_r_sample,
     ):
+
+
+    joint_metric_matrices = metric_matrices["joint"]
+    response_metric_vectors = metric_matrices["response"]
+
     coupling_gain = {
         "ind": kl_divergence(gamma_ind, gamma_ind),
         "resp_sample": kl_divergence(gamma_resp_sample, gamma_ind),
@@ -53,22 +57,22 @@ def compute_model_expected_metrics(
                 E[model][metric] = time_metrics[model][metric]
 
         else:
-            E["ind"][metric] = expected_joint(gamma_ind, metric_mats[metric])
+            E["ind"][metric] = expected_joint(gamma_ind, joint_metric_matrices[metric])
             E["resp_sample"][metric] = expected_robot(
                 q_r_sample,
-                response_vecs[metric],
+                response_metric_vectors[metric],
             )
             E["resp_marg"][metric] = expected_joint(
                 gamma_resp_marg,
-                metric_mats[metric],
+                joint_metric_matrices[metric],
             )
             E["joint"][metric] = expected_joint(
                 gamma_joint,
-                metric_mats[metric],
+                joint_metric_matrices[metric],
             )
             E["marg"][metric] = expected_joint(
                 gamma_marg,
-                metric_mats[metric],
+                joint_metric_matrices[metric],
             )
 
     return E
